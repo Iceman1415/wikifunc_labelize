@@ -3,6 +3,8 @@ use crate::simple_value::StringType;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct SimpleType(pub StringType);
 
+// CompactKey is used for CompactValue, as the keys of objects
+// CompactKeys are strings with type information about its corresponding values
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CompactKey {
     StringType(StringType),

@@ -30,47 +30,49 @@ impl TryFrom<SimpleValue> for Type {
             SimpleValue::StringType(k) => Ok(Type::Simple(k)),
             SimpleValue::Array(_) => Err(()),
             SimpleValue::Object(o) => {
-                match o.iter().find(|(k, _v)| k.is_labelled("Z1K1")).cloned() {
-                    Some((z1k1, v)) => {
-                        let typ_of_typ: Type = v.try_into()?;
-                        match typ_of_typ {
-                            Type::Simple(s) => Ok(Type::WithArgs(
-                                s,
-                                o.into_iter()
-                                    .filter(|(k, _v)| !k.is_labelled("Z1K1"))
-                                    .collect(),
-                            )),
-                            Type::WithArgs(typ, args) => Ok(Type::WithArgs(
-                                typ,
-                                o.into_iter()
-                                    .filter(|(k, _v)| !k.is_labelled("Z1K1"))
-                                    .chain(std::iter::once((
-                                        z1k1.clone(),
-                                        SimpleValue::Object(
-                                            args.into_iter()
-                                                .filter(|(k, _v)| !k.is_labelled("Z1K1"))
-                                                .collect(),
-                                        ),
-                                    )))
-                                    .collect(),
-                            )),
-                        }
+                // if the value of Z1K1 is an object, the Z1K1 object itself should have a key Z1K1
+                if let Some((z1k1, v)) = o.iter().find(|(k, _v)| k.is_labelled("Z1K1")).cloned() {
+                    // We'll recursively look into the value of Z1K1, until it is a StringType and not an object.
+                    // We then lift that StringType to the upper most level
+                    let typ_of_typ: Type = v.try_into()?;
+                    match typ_of_typ {
+                        Type::Simple(s) => Ok(Type::WithArgs(
+                            s,
+                            o.into_iter()
+                                .filter(|(k, _v)| !k.is_labelled("Z1K1"))
+                                .collect(),
+                        )),
+                        Type::WithArgs(typ, args) => Ok(Type::WithArgs(
+                            typ,
+                            o.into_iter()
+                                .filter(|(k, _v)| !k.is_labelled("Z1K1"))
+                                .chain(std::iter::once((
+                                    z1k1.clone(),
+                                    SimpleValue::Object(
+                                        args.into_iter()
+                                            .filter(|(k, _v)| !k.is_labelled("Z1K1"))
+                                            .collect(),
+                                    ),
+                                )))
+                                .collect(),
+                        )),
                     }
-                    None => Err(()),
+                } else {
+                    Err(())
                 }
             }
         }
     }
 }
 
-// we "compactify" by putting the type of objects into the "key" when we stringify
-// so an object now has 3 fields, the key, the type, and the value
+/// By converting from SimpleValue to TypedForm,
+/// we separate the types of ZObjects and Arrays from the rest of the data
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypedForm {
     StringType(StringType),
     Array(Type, Vec<TypedForm>),
+    // All ZObjects should have a type, but just in case...
     Object(BTreeSet<(StringType, TypedForm)>),
-    // in the intermediate form, we pull the type of objects out
     TypedObject(Type, BTreeSet<(StringType, TypedForm)>),
 }
 
@@ -79,8 +81,10 @@ impl From<SimpleValue> for TypedForm {
         match val {
             SimpleValue::StringType(s) => Self::StringType(s),
             SimpleValue::Array(v) => {
+                // we're assuming all arrays are "Benjamin arrays"
+                // see: https://meta.wikimedia.org/wiki/Abstract_Wikipedia/Updates/2022-07-29
                 let typ = Type::try_from(v[0].clone()).expect(
-                    "the first item of an ZObject array should be the type of the array's elements",
+                    "the first item of an ZObject array should be the type of the elements",
                 );
                 Self::Array(typ, v.into_iter().skip(1).map(|x| x.into()).collect())
             }
@@ -89,24 +93,13 @@ impl From<SimpleValue> for TypedForm {
                     .iter()
                     .find(|(k, _v)| k.is_labelled("Z1K1"))
                     .map(|x| x.clone());
-                // if there is a key Z1K1 in the object (aka the object has a type)
-                // we try to raise the type upward / outside, into the key of the object
+                // if there is a key Z1K1 (type) in the object, we separate it
+                // At a later stage the type will be merged into the parent object's key
                 match z1k1 {
-                    // if the type is simple, we can just move it
-                    Some((_z1k1_key, SimpleValue::StringType(typ))) => Self::TypedObject(
-                        Type::Simple(typ),
-                        o.into_iter()
-                            .filter(|(k, _v)| !k.is_labelled("Z1K1"))
-                            .map(|(k, v)| (k, v.into()))
-                            .collect(),
-                    ),
-                    Some((_z1k1_key, SimpleValue::Array(_typ))) => todo!(),
-                    // if the type is an object...
-                    Some((_z1k1_key, SimpleValue::Object(typ))) => {
-                        //TODO: handle if the value of Z1K1 cannot be converted into Type
-                        let converted_type: Type = SimpleValue::Object(typ).try_into().unwrap();
+                    Some((_z1k1_key, typ)) => {
                         Self::TypedObject(
-                            converted_type,
+                            //TODO: handle if the value of Z1K1 cannot be converted into Type
+                            typ.try_into().unwrap(),
                             o.into_iter()
                                 .filter(|(k, _v)| !k.is_labelled("Z1K1"))
                                 .map(|(k, v)| (k, v.into()))

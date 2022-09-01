@@ -6,6 +6,9 @@ use crate::compact_key::{CompactKey, SimpleType};
 use crate::simple_value::StringType;
 use crate::typed_form::{Type, TypedForm};
 
+// Compared to TypedForm, we allow more possible variants
+// - StringType became CompactKey
+// Tranformations (e.g. compress_monolingual()) are easy to do in IntermediateForm
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum IntermediateForm {
     KeyType(CompactKey),

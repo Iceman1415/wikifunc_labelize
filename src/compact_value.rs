@@ -7,8 +7,7 @@ use crate::intermediate_form::IntermediateForm;
 use crate::simple_value::{SimpleValue, StringType};
 use crate::typed_form::{Type, TypedForm};
 
-// we "compactify" by putting the type of objects into the "key" when we stringify
-// so an object now has 3 fields, the key, the type, and the value
+// CompactValue is the final type, ready to be transformed back to json Value
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CompactValue {
     KeyType(CompactKey),

@@ -1,15 +1,16 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use serde_json::Value;
 
+// We store human readable labels (map {natural language ZID: label}) along with the ZID
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct LabelledNode {
-    readable_labels: BTreeSet<(String, String)>,
+    readable_labels: BTreeMap<String, String>,
     z_label: String,
 }
 
 impl LabelledNode {
-    pub fn from(readable_labels: BTreeSet<(String, String)>, z_label: String) -> Self {
+    pub fn from(readable_labels: BTreeMap<String, String>, z_label: String) -> Self {
         Self {
             readable_labels,
             z_label,
@@ -22,14 +23,8 @@ impl LabelledNode {
             self.z_label,
             langs
                 .iter()
-                .find_map(|lang| self.readable_labels.iter().find(|&label| label.0 == *lang))
-                .unwrap_or(
-                    self.readable_labels
-                        .iter()
-                        .next()
-                        .unwrap_or(&("".to_string(), "<no label>".to_string()))
-                )
-                .1
+                .find_map(|lang| self.readable_labels.get(lang))
+                .unwrap_or(&"<no label>".to_string())
                 .clone()
         )
     }
@@ -63,6 +58,7 @@ impl From<String> for StringType {
     }
 }
 
+// we restrict possible variants when converting from Value, dropping Null, Bool, and Number
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum SimpleValue {
     StringType(StringType),

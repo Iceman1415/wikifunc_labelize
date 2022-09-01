@@ -122,7 +122,7 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
                         .to_string(),
                 ))
             })
-            .collect::<std::result::Result<BTreeSet<_>, MyError>>()?;
+            .collect::<std::result::Result<_, MyError>>()?;
         // Ok(format!("{} ({})", res, s))
         Ok(StringType::LabelledNode(LabelledNode::from(
             readable_labels,
@@ -202,7 +202,7 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
                         .to_string(),
                 ))
             })
-            .collect::<std::result::Result<BTreeSet<_>, MyError>>()?;
+            .collect::<std::result::Result<_, MyError>>()?;
         Ok(StringType::LabelledNode(LabelledNode::from(
             readable_labels,
             s,
@@ -212,7 +212,7 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
     }
 }
 
-async fn _labelize_wrapped_key(s: String) -> StringType {
+async fn _labelize_wrapped(s: String) -> StringType {
     if s == "" {
         return StringType::String(s);
     }
@@ -226,20 +226,6 @@ async fn _labelize_wrapped_key(s: String) -> StringType {
     }
 }
 
-async fn _labelize_wrapped(s: String) -> SimpleValue {
-    if s == "" {
-        return SimpleValue::StringType(StringType::String(s));
-    }
-    // println!("labelize wrapped {}", s);
-    match _labelize(s.clone()).await {
-        Ok(out) => out.into(),
-        Err(err) => {
-            eprintln!("error when parsing {}: {:?}", s, err);
-            SimpleValue::StringType(StringType::String(s))
-        }
-    }
-}
-
 #[async_recursion]
 async fn _labelize_json(v: Value) -> SimpleValue {
     // println!("_labelize_json_wrapped {}", v);
@@ -247,18 +233,17 @@ async fn _labelize_json(v: Value) -> SimpleValue {
         Value::Null => unimplemented!(),
         Value::Bool(_b) => unimplemented!(),
         Value::Number(_n) => unimplemented!(),
-        Value::String(s) => _labelize_wrapped(s).await,
+        Value::String(s) => SimpleValue::StringType(_labelize_wrapped(s).await),
         Value::Array(a) => {
             SimpleValue::Array(future::join_all(a.into_iter().map(|x| _labelize_json(x))).await)
         }
-        Value::Object(o) => {
-            SimpleValue::Object(BTreeSet::from_iter(
-                future::join_all(o.into_iter().map(|(key, val)| {
-                    future::join(_labelize_wrapped_key(key), _labelize_json(val))
-                }))
-                .await,
-            ))
-        }
+        Value::Object(o) => SimpleValue::Object(BTreeSet::from_iter(
+            future::join_all(
+                o.into_iter()
+                    .map(|(key, val)| future::join(_labelize_wrapped(key), _labelize_json(val))),
+            )
+            .await,
+        )),
     }
 }
 
