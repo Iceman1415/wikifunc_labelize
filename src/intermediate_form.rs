@@ -151,11 +151,11 @@ impl IntermediateForm {
                 }
             }
             IntermediateForm::TypedObject(typ, obj) => {
-                IntermediateForm::TypedObject(typ, compress_monolingual(obj))
+                IntermediateForm::TypedObject(typ.compress_monolingual(), compress_monolingual(obj))
             }
             IntermediateForm::KeyType(_) => self,
             IntermediateForm::Array(typ, v) => IntermediateForm::Array(
-                typ,
+                typ.compress_monolingual(),
                 v.into_iter().map(|x| x.compress_monolingual()).collect(),
             ),
             IntermediateForm::Object(obj) => IntermediateForm::Object(compress_monolingual(obj)),
