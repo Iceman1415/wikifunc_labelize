@@ -2,7 +2,6 @@ use std::collections::BTreeSet;
 
 use futures::future;
 use regex::Regex;
-use serde_json::json;
 use serde_json::Value;
 
 use actix_web::{get, post, App, HttpResponse, HttpServer, Responder};
@@ -32,90 +31,15 @@ async fn hello() -> impl Responder {
 </body>"#)
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct LabelledNode {
-    readable_labels: BTreeSet<(String, String)>,
-    z_label: String,
-}
-
-impl LabelledNode {
-    fn choose_lang(self, langs: &Vec<String>) -> String {
-        format!(
-            "{}: {}",
-            self.z_label,
-            langs
-                .iter()
-                .find_map(|lang| self.readable_labels.iter().find(|&label| label.0 == *lang))
-                .unwrap_or(
-                    self.readable_labels
-                        .iter()
-                        .next()
-                        .unwrap_or(&("".to_string(), "<no label>".to_string()))
-                )
-                .1
-                .clone()
-        )
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum StringType {
-    String(String),
-    LabelledNode(LabelledNode),
-}
-
-impl StringType {
-    fn is_labelled(&self, label: &str) -> bool {
-        match self {
-            Self::String(s) => s == label,
-            StringType::LabelledNode(n) => n.z_label == label,
-        }
-    }
-}
-
-impl StringType {
-    fn choose_lang(self, langs: &Vec<String>) -> String {
-        match self {
-            StringType::String(s) => s,
-            StringType::LabelledNode(n) => n.choose_lang(langs),
-        }
-    }
-}
-
-impl From<String> for StringType {
-    fn from(s: String) -> Self {
-        StringType::String(s)
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum SimpleValue {
-    StringType(StringType),
-    Array(Vec<SimpleValue>),
-    Object(BTreeSet<(StringType, SimpleValue)>),
-}
-
-impl From<StringType> for SimpleValue {
-    fn from(k: StringType) -> Self {
-        SimpleValue::StringType(k)
-    }
-}
-
-impl SimpleValue {
-    fn choose_lang(self, langs: &Vec<String>) -> Value {
-        match self {
-            SimpleValue::StringType(s) => s.choose_lang(langs).into(),
-            SimpleValue::Array(v) => {
-                Value::Array(v.into_iter().map(|x| x.choose_lang(langs)).collect())
-            }
-            SimpleValue::Object(o) => Value::Object(
-                o.into_iter()
-                    .map(|(k, v)| (k.choose_lang(langs), v.choose_lang(langs)))
-                    .collect(),
-            ),
-        }
-    }
-}
+mod simple_value;
+use simple_value::{LabelledNode, SimpleValue, StringType};
+mod typed_form;
+use typed_form::TypedForm;
+mod intermediate_form;
+use intermediate_form::IntermediateForm;
+mod compact_key;
+mod compact_value;
+use compact_value::CompactValue;
 
 #[derive(Error, Debug, PartialEq, Clone)]
 enum MyError {
@@ -200,10 +124,10 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
             })
             .collect::<std::result::Result<BTreeSet<_>, MyError>>()?;
         // Ok(format!("{} ({})", res, s))
-        Ok(StringType::LabelledNode(LabelledNode {
+        Ok(StringType::LabelledNode(LabelledNode::from(
             readable_labels,
-            z_label: s,
-        }))
+            s,
+        )))
     } else if Regex::new(r"^Z\d+K\d+$").unwrap().is_match(&s) {
         let pat = s.split("K").collect::<Vec<_>>();
         let z_number = pat[0];
@@ -279,10 +203,10 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
                 ))
             })
             .collect::<std::result::Result<BTreeSet<_>, MyError>>()?;
-        Ok(StringType::LabelledNode(LabelledNode {
+        Ok(StringType::LabelledNode(LabelledNode::from(
             readable_labels,
-            z_label: s,
-        }))
+            s,
+        )))
     } else {
         Ok(StringType::String(s))
     }
@@ -334,382 +258,6 @@ async fn _labelize_json(v: Value) -> SimpleValue {
                 }))
                 .await,
             ))
-        }
-    }
-}
-
-//
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum Type {
-    Simple(StringType),
-    WithArgs(StringType, BTreeSet<(StringType, SimpleValue)>),
-}
-
-impl Type {
-    fn choose_lang(self, langs: &Vec<String>) -> Value {
-        match self {
-            Type::Simple(k) => k.choose_lang(langs).into(),
-            Type::WithArgs(typ, args) => {
-                json!({"type": typ.choose_lang(langs), "args": SimpleValue::Object(args).choose_lang(langs)})
-            }
-        }
-    }
-}
-
-impl TryFrom<SimpleValue> for Type {
-    type Error = ();
-
-    fn try_from(value: SimpleValue) -> Result<Self, Self::Error> {
-        match value {
-            SimpleValue::StringType(k) => Ok(Type::Simple(k)),
-            SimpleValue::Array(_) => Err(()),
-            SimpleValue::Object(o) => {
-                match o.iter().find(|(k, _v)| k.is_labelled("Z1K1")).cloned() {
-                    Some((z1k1, v)) => {
-                        let typ_of_typ: Type = v.try_into()?;
-                        match typ_of_typ {
-                            Type::Simple(s) => Ok(Type::WithArgs(
-                                s,
-                                o.into_iter()
-                                    .filter(|(k, _v)| !k.is_labelled("Z1K1"))
-                                    .collect(),
-                            )),
-                            Type::WithArgs(typ, args) => Ok(Type::WithArgs(
-                                typ,
-                                o.into_iter()
-                                    .filter(|(k, _v)| !k.is_labelled("Z1K1"))
-                                    .chain(std::iter::once((
-                                        z1k1.clone(),
-                                        SimpleValue::Object(
-                                            args.into_iter()
-                                                .filter(|(k, _v)| !k.is_labelled("Z1K1"))
-                                                .collect(),
-                                        ),
-                                    )))
-                                    .collect(),
-                            )),
-                        }
-                    }
-                    None => Err(()),
-                }
-            }
-        }
-    }
-}
-
-// we "compactify" by putting the type of objects into the "key" when we stringify
-// so an object now has 3 fields, the key, the type, and the value
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum IntermediateForm {
-    KeyType(CompactKey),
-    Array(Type, Vec<IntermediateForm>),
-    Object(BTreeSet<(StringType, IntermediateForm)>),
-    // in the intermediate form, we pull the type of objects out
-    TypedObject(Type, BTreeSet<(StringType, IntermediateForm)>),
-}
-
-impl From<SimpleValue> for IntermediateForm {
-    fn from(val: SimpleValue) -> Self {
-        match val {
-            SimpleValue::StringType(k) => Self::KeyType(k.into()),
-            SimpleValue::Array(v) => {
-                let typ = Type::try_from(v[0].clone()).expect(
-                    "first item of an ZObject array should be the type of the array's elements",
-                );
-                Self::Array(typ, v.into_iter().skip(1).map(|x| x.into()).collect())
-            }
-            SimpleValue::Object(o) => {
-                let z1k1 = o
-                    .iter()
-                    .find(|(k, _v)| k.is_labelled("Z1K1"))
-                    .map(|x| x.clone());
-                // if there is a key Z1K1 in the object (aka the object has a type)
-                // we try to raise the type upward / outside, into the key of the object
-                match z1k1 {
-                    // if the type is simple, we can just move it
-                    Some((_z1k1_key, SimpleValue::StringType(typ))) => Self::TypedObject(
-                        Type::Simple(typ),
-                        o.into_iter()
-                            .filter(|(k, _v)| !k.is_labelled("Z1K1"))
-                            .map(|(k, v)| (k, v.into()))
-                            .collect(),
-                    ),
-                    Some((_z1k1_key, SimpleValue::Array(_typ))) => todo!(),
-                    // if the type is an object...
-                    Some((_z1k1_key, SimpleValue::Object(typ))) => {
-                        //TODO: handle if the value of Z1K1 cannot be converted into Type
-                        let converted_type: Type = SimpleValue::Object(typ).try_into().unwrap();
-                        Self::TypedObject(
-                            converted_type,
-                            o.into_iter()
-                                .filter(|(k, _v)| !k.is_labelled("Z1K1"))
-                                .map(|(k, v)| (k, v.into()))
-                                .collect(),
-                        )
-                    }
-                    None => Self::Object(o.into_iter().map(|(k, v)| (k, v.into())).collect()),
-                }
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-struct SimpleType(StringType);
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum CompactKey {
-    StringType(StringType),
-    TypedLabelledNode(StringType, SimpleType),
-    Transient(SimpleType),
-}
-
-impl From<StringType> for CompactKey {
-    fn from(s: StringType) -> Self {
-        Self::StringType(s)
-    }
-}
-
-impl CompactKey {
-    fn choose_lang(self, langs: &Vec<String>) -> String {
-        match self {
-            CompactKey::StringType(n) => n.choose_lang(langs),
-            CompactKey::TypedLabelledNode(key, typ) => {
-                format!("{} [{}]", key.choose_lang(langs), typ.0.choose_lang(langs),).into()
-            }
-            CompactKey::Transient(typ) => format!("[{}]", typ.0.choose_lang(langs),),
-        }
-    }
-}
-
-// we "compactify" by putting the type of objects into the "key" when we stringify
-// so an object now has 3 fields, the key, the type, and the value
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-enum CompactValue {
-    KeyType(CompactKey),
-    Array(Vec<CompactValue>),
-    Object(BTreeSet<(CompactKey, CompactValue)>),
-}
-
-impl From<SimpleValue> for CompactValue {
-    fn from(val: SimpleValue) -> Self {
-        match val {
-            SimpleValue::StringType(k) => CompactValue::KeyType(k.into()),
-            SimpleValue::Array(a) => CompactValue::Array(a.into_iter().map(|x| x.into()).collect()),
-            SimpleValue::Object(o) => {
-                CompactValue::Object(o.into_iter().map(|(k, v)| (k.into(), v.into())).collect())
-            }
-        }
-    }
-}
-
-fn rebuild_obj_with_type_args(
-    obj: BTreeSet<(StringType, IntermediateForm)>,
-    type_args: BTreeSet<(StringType, SimpleValue)>,
-) -> CompactValue {
-    // let z1k1 = _labelize("Z1K1".to_string()).await.unwrap();
-    let z1k1 = StringType::String("Z1K1".to_string());
-    let converted_obj: CompactValue = IntermediateForm::Object(obj).into();
-    match converted_obj {
-        CompactValue::Object(converted_obj) => CompactValue::Object(
-            converted_obj
-                .into_iter()
-                .chain(std::iter::once((
-                    CompactKey::StringType(z1k1),
-                    CompactValue::Object(
-                        type_args
-                            .into_iter()
-                            .map(|(k, v)| (k.into(), v.into()))
-                            .collect(),
-                    ),
-                )))
-                .collect(),
-        ),
-        _ => unreachable!(),
-    }
-}
-
-impl From<IntermediateForm> for CompactValue {
-    fn from(val: IntermediateForm) -> Self {
-        match val {
-            IntermediateForm::KeyType(k) => CompactValue::KeyType(k.into()),
-            IntermediateForm::Array(Type::Simple(_), v) => {
-                CompactValue::Array(v.into_iter().map(|x| x.into()).collect())
-            }
-            IntermediateForm::Array(Type::WithArgs(_typ, type_args), v) => CompactValue::Array(
-                std::iter::once(IntermediateForm::from(SimpleValue::Object(type_args)).into())
-                    .chain(v.into_iter().map(|x| x.into()))
-                    .collect(),
-            ),
-            IntermediateForm::Object(o) => CompactValue::Object(
-                o.into_iter()
-                    .map(|(k, v)| match v {
-                        // for each typed value in object, we pull the type outward
-                        IntermediateForm::TypedObject(typ, obj) => match typ {
-                            Type::Simple(typ) => (
-                                CompactKey::TypedLabelledNode(k, SimpleType(typ)),
-                                IntermediateForm::Object(obj).into(),
-                            ),
-                            Type::WithArgs(typ, type_args) => (
-                                CompactKey::TypedLabelledNode(k, SimpleType(typ)),
-                                rebuild_obj_with_type_args(obj, type_args),
-                            ),
-                        },
-                        IntermediateForm::Array(typ, v) => match typ {
-                            Type::Simple(typ) => (
-                                CompactKey::TypedLabelledNode(k, SimpleType(typ)),
-                                CompactValue::Array(v.into_iter().map(|x| x.into()).collect()),
-                            ),
-                            Type::WithArgs(typ, type_args) => (
-                                CompactKey::TypedLabelledNode(k, SimpleType(typ)),
-                                CompactValue::Array(
-                                    std::iter::once(
-                                        IntermediateForm::from(SimpleValue::Object(type_args))
-                                            .into(),
-                                    )
-                                    .chain(v.into_iter().map(|x| x.into()))
-                                    .collect(),
-                                ),
-                            ),
-                        },
-                        _ => (k.into(), v.into()),
-                    })
-                    .collect(),
-            ),
-            IntermediateForm::TypedObject(typ, obj) => {
-                CompactValue::Object(BTreeSet::from([match typ {
-                    Type::Simple(typ) => (
-                        CompactKey::Transient(SimpleType(typ)),
-                        IntermediateForm::Object(obj).into(),
-                    ),
-                    Type::WithArgs(typ, type_args) => (
-                        CompactKey::Transient(SimpleType(typ)),
-                        rebuild_obj_with_type_args(obj, type_args),
-                    ),
-                }]))
-            }
-        }
-    }
-}
-
-impl CompactValue {
-    fn choose_lang(self, langs: &Vec<String>) -> Value {
-        match self {
-            CompactValue::KeyType(k) => k.choose_lang(langs).into(),
-            CompactValue::Array(v) => {
-                Value::Array(v.into_iter().map(|x| x.choose_lang(langs)).collect())
-            }
-            CompactValue::Object(o) => Value::Object(
-                o.into_iter()
-                    .map(|(k, v)| (k.choose_lang(langs), v.choose_lang(langs)))
-                    .collect(),
-            ),
-        }
-    }
-}
-
-impl IntermediateForm {
-    fn drop_array_item_types(self) -> Self {
-        match self {
-            IntermediateForm::Array(typ, v) => IntermediateForm::Array(
-                typ,
-                v.into_iter()
-                    .map(|x| match x {
-                        IntermediateForm::TypedObject(_typ, obj) => {
-                            IntermediateForm::Object(obj).drop_array_item_types()
-                        }
-                        _ => x.drop_array_item_types(),
-                    })
-                    .collect(),
-            ),
-            IntermediateForm::Object(o) => IntermediateForm::Object(
-                o.into_iter()
-                    .map(|(k, v)| (k, v.drop_array_item_types()))
-                    .collect(),
-            ),
-            IntermediateForm::TypedObject(t, o) => IntermediateForm::TypedObject(
-                t,
-                o.into_iter()
-                    .map(|(k, v)| (k, v.drop_array_item_types()))
-                    .collect(),
-            ),
-            IntermediateForm::KeyType(_) => self,
-        }
-    }
-
-    fn compress_monolingual(self) -> Self {
-        // we transform objects of type Z11 (Monolingual Text),
-        // into only a TypeLabelledNode of
-        // key: the actual text, value of Z11K2
-        // type: the language, value of Z11K1
-        match self {
-            IntermediateForm::TypedObject(Type::Simple(typ), val) => {
-                if typ.is_labelled("Z11") {
-                    IntermediateForm::KeyType(CompactKey::TypedLabelledNode(
-                        match &val.iter().find(|(k, _v)| k.is_labelled("Z11K2")).unwrap().1 {
-                            IntermediateForm::KeyType(CompactKey::StringType(k)) => k.clone(),
-                            _ => todo!(),
-                        },
-                        match val
-                            .into_iter()
-                            .find(|(k, _v)| k.is_labelled("Z11K1"))
-                            .unwrap()
-                            .1
-                        {
-                            IntermediateForm::KeyType(CompactKey::StringType(k)) => SimpleType(k),
-                            _ => todo!(),
-                        },
-                    ))
-                } else {
-                    IntermediateForm::TypedObject(
-                        Type::Simple(typ),
-                        val.into_iter()
-                            .map(|(k, v)| (k, v.compress_monolingual()))
-                            .collect(),
-                    )
-                }
-            }
-            IntermediateForm::TypedObject(typ, val) => IntermediateForm::TypedObject(
-                typ,
-                val.into_iter()
-                    .map(|(k, v)| (k, v.compress_monolingual()))
-                    .collect(),
-            ),
-            IntermediateForm::KeyType(_) => self,
-            IntermediateForm::Array(typ, v) => IntermediateForm::Array(
-                typ,
-                v.into_iter().map(|x| x.compress_monolingual()).collect(),
-            ),
-            IntermediateForm::Object(obj) => IntermediateForm::Object(
-                obj.into_iter()
-                    .map(|(k, v)| (k, v.compress_monolingual()))
-                    .collect(),
-            ),
-        }
-    }
-}
-
-impl IntermediateForm {
-    fn choose_lang(self, langs: &Vec<String>) -> Value {
-        match self {
-            IntermediateForm::KeyType(k) => k.choose_lang(langs).into(),
-            IntermediateForm::Array(typ, v) => Value::Array(
-                std::iter::once(typ.choose_lang(langs))
-                    .chain(v.into_iter().map(|x| x.choose_lang(langs)))
-                    .collect(),
-            ),
-            IntermediateForm::Object(o) => Value::Object(
-                o.into_iter()
-                    .map(|(k, v)| (k.choose_lang(langs), v.choose_lang(langs)))
-                    .collect(),
-            ),
-            IntermediateForm::TypedObject(typ, o) => {
-                json!({"debug type":typ.choose_lang(langs), "debug obj": Value::Object(
-                    o.into_iter()
-                        .map(|(k, v)| (k.choose_lang(langs), v.choose_lang(langs)))
-                        .collect(),
-                )})
-            }
         }
     }
 }
@@ -783,7 +331,7 @@ async fn debug_route(req_body: String) -> impl Responder {
         Err(r) => return r,
     };
     let val = _labelize_json(val).await;
-    let val: IntermediateForm = val.into();
+    let val: TypedForm = val.into();
     use std::io::Write;
     writeln!(
         std::fs::File::create("./log/debug.json").unwrap(),
@@ -791,6 +339,7 @@ async fn debug_route(req_body: String) -> impl Responder {
         val.clone().choose_lang(&langs)
     )
     .unwrap();
+    let val: IntermediateForm = val.into();
     let val = val.compress_monolingual();
     let val = val.drop_array_item_types();
     writeln!(
@@ -810,7 +359,7 @@ async fn compactify_route(req_body: String) -> impl Responder {
         Err(r) => return r,
     };
     let val = _labelize_json(val).await;
-    let val: IntermediateForm = val.into();
+    let val = IntermediateForm::from(TypedForm::from(val));
     let val = val.compress_monolingual();
     let val = val.drop_array_item_types();
     let val: CompactValue = val.into();
