@@ -1,14 +1,13 @@
-use std::collections::BTreeSet;
-
 use serde_json::{json, Value};
 
-// mod crate::simple_value;
 use crate::simple_value::{SimpleValue, StringType};
+
+type TypedObjectType = std::collections::BTreeSet<(StringType, TypedForm)>;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum Type {
     Simple(StringType),
-    WithArgs(StringType, BTreeSet<(StringType, SimpleValue)>),
+    WithArgs(StringType, TypedObjectType),
 }
 
 impl Type {
@@ -16,7 +15,9 @@ impl Type {
         match self {
             Type::Simple(k) => k.choose_lang(langs).into(),
             Type::WithArgs(typ, args) => {
-                json!({"type": typ.choose_lang(langs), "args": SimpleValue::Object(args).choose_lang(langs)})
+                json!({"type": typ.choose_lang(langs), "args": Value::Object(
+                    args.into_iter().map(|(k,v)| (k.choose_lang(langs).into(), v.choose_lang(langs))).collect()
+                )})
             }
         }
     }
@@ -34,21 +35,23 @@ impl TryFrom<SimpleValue> for Type {
                 if let Some((z1k1, v)) = o.iter().find(|(k, _v)| k.is_labelled("Z1K1")).cloned() {
                     // We'll recursively look into the value of Z1K1, until it is a StringType and not an object.
                     // We then lift that StringType to the upper most level
-                    let typ_of_typ: Type = v.try_into()?;
+                    let typ_of_typ = Type::try_from(v)?;
                     match typ_of_typ {
                         Type::Simple(s) => Ok(Type::WithArgs(
                             s,
                             o.into_iter()
                                 .filter(|(k, _v)| !k.is_labelled("Z1K1"))
+                                .map(|(k, v)| (k, v.into()))
                                 .collect(),
                         )),
                         Type::WithArgs(typ, args) => Ok(Type::WithArgs(
                             typ,
                             o.into_iter()
                                 .filter(|(k, _v)| !k.is_labelled("Z1K1"))
+                                .map(|(k, v)| (k, v.into()))
                                 .chain(std::iter::once((
                                     z1k1.clone(),
-                                    SimpleValue::Object(
+                                    TypedForm::Object(
                                         args.into_iter()
                                             .filter(|(k, _v)| !k.is_labelled("Z1K1"))
                                             .collect(),
@@ -70,10 +73,14 @@ impl TryFrom<SimpleValue> for Type {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypedForm {
     StringType(StringType),
+    // It would be great if I can distinguish typed array (Benjamin arrays) from regular untyped json arrays,
+    // but the only way to distinguish them is to infer the type of the elements by comparing the "shape",
+    // which is quite complicated...
+    // Array(Vec<TypedForm>),
     Array(Type, Vec<TypedForm>),
     // All ZObjects should have a type, but just in case...
-    Object(BTreeSet<(StringType, TypedForm)>),
-    TypedObject(Type, BTreeSet<(StringType, TypedForm)>),
+    Object(TypedObjectType),
+    TypedObject(Type, TypedObjectType),
 }
 
 impl From<SimpleValue> for TypedForm {
