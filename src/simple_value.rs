@@ -24,7 +24,13 @@ impl LabelledNode {
             langs
                 .iter()
                 .find_map(|lang| self.readable_labels.get(lang))
-                .unwrap_or(&"<no label>".to_string())
+                .unwrap_or(
+                    self.readable_labels
+                        .iter()
+                        .map(|(_lang, label)| label)
+                        .next()
+                        .unwrap_or(&"<no label>".to_string())
+                )
                 .clone()
         )
     }

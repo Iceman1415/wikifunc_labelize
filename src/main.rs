@@ -319,21 +319,33 @@ async fn debug_route(req_body: String) -> impl Responder {
     let val: TypedForm = val.into();
     use std::io::Write;
     writeln!(
-        std::fs::File::create("./log/debug.json").unwrap(),
+        std::fs::File::create("./log/1_typed.json").unwrap(),
         "{}",
         val.clone().choose_lang(&langs)
     )
     .unwrap();
     let val: IntermediateForm = val.into();
+    writeln!(
+        std::fs::File::create("./log/2_intermediate.json").unwrap(),
+        "{}",
+        val.clone().choose_lang(&langs)
+    )
+    .unwrap();
     let val = val.compress_monolingual();
     let val = val.drop_array_item_types();
     writeln!(
-        std::fs::File::create("./log/debug2.json").unwrap(),
+        std::fs::File::create("./log/3_processed.json").unwrap(),
         "{}",
         val.clone().choose_lang(&langs)
     )
     .unwrap();
     let val: CompactValue = val.into();
+    writeln!(
+        std::fs::File::create("./log/4_compact.json").unwrap(),
+        "{}",
+        val.clone().choose_lang(&langs)
+    )
+    .unwrap();
     HttpResponse::Ok().json(val.choose_lang(&langs))
 }
 
@@ -345,9 +357,12 @@ async fn compactify_route(req_body: String) -> impl Responder {
     };
     let val = _labelize_json(val).await;
     let val = IntermediateForm::from(TypedForm::from(val));
+    let val = val.compress_reference();
+    let val = val.compress_string();
     let val = val.compress_monolingual();
     let val = val.drop_array_item_types();
     let val: CompactValue = val.into();
+    let val = val.compress_simple_classes();
     HttpResponse::Ok().json(val.choose_lang(&langs))
 }
 
