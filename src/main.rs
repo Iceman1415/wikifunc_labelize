@@ -1,10 +1,14 @@
 use std::collections::BTreeSet;
+use std::net::SocketAddr;
 
 use futures::future;
 use regex::Regex;
 use serde_json::Value;
 
 use actix_web::{get, post, App, HttpResponse, HttpServer, Responder};
+use tracing::{debug, info, trace, warn};
+use tracing_actix_web::TracingLogger;
+
 use async_recursion::async_recursion;
 
 use cached::proc_macro::cached;
@@ -16,7 +20,8 @@ use thiserror::Error;
 const DOMAIN: &str = "https://wikifunctions.beta.wmflabs.org/w";
 
 #[get("/")]
-async fn hello() -> impl Responder {
+async fn index() -> impl Responder {
+    info!("index route");
     HttpResponse::Ok().body(r#"<body>
     <div><h2>Get /</h2><div>This help page</div></div>
     <div><h2>Post /labelize</h2>
@@ -52,7 +57,7 @@ enum MyError {
 }
 
 async fn fetch(z_number: &str) -> std::result::Result<Value, MyError> {
-    println!("fetching {}", z_number);
+    debug!("fetching from wikifunction: {}", z_number);
     match reqwest::get(format!("{}/api.php?action=query&format=json&list=wikilambdaload_zobjects&wikilambdaload_zids={}&wikilambdaload_canonical=true",DOMAIN, z_number)).await {
         Ok(res) => Ok(
             serde_json::from_str::<Value>(&res.text().await.unwrap()).expect("failed parsing wikifunction response")
@@ -66,29 +71,17 @@ async fn fetch(z_number: &str) -> std::result::Result<Value, MyError> {
         .expect("no \"data\" key in wikifunction response")
         .to_owned()
         ),
-        Err(x) => {eprintln!("error fetching {}: {}", z_number, x); Err(MyError::NetworkError(x.to_string()))}
+        Err(x) => {warn!("error fetching {}: {}", z_number, x); Err(MyError::NetworkError(x.to_string()))}
     }
 }
 
-// #[io_cached(
-//     map_error = r##"|e| MyError::RedisError(format!("{:?}", e))"##,
-//     type = "AsyncRedisCache<String, String>",
-//     create = r##" {
-//         AsyncRedisCache::new("cached_redis_prefix", 600)
-//             .set_refresh(true)
-//             .set_connection_string("redis://localhost:6379")
-//             .build()
-//             .await
-//             .expect("error building redis cache")
-//     } "##
-// )]
 #[cached(
     type = "TimedCache<String, std::result::Result<StringType, MyError>>",
     create = "{ TimedCache:: with_lifespan_and_refresh(600, true) }",
     convert = r#"{ format!("{}", s) }"#
 )]
 async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
-    // println!("labelize {}", s);
+    trace!("labelize {}", s);
     if Regex::new(r"^Z\d+$").unwrap().is_match(&s) {
         let readable_labels = fetch(&s)
             .await?
@@ -123,7 +116,6 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
                 ))
             })
             .collect::<std::result::Result<_, MyError>>()?;
-        // Ok(format!("{} ({})", res, s))
         Ok(StringType::LabelledNode(LabelledNode::from(
             readable_labels,
             s,
@@ -213,14 +205,14 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
 }
 
 async fn _labelize_wrapped(s: String) -> StringType {
+    trace!("labelize wrapped {}", s);
     if s == "" {
         return StringType::String(s);
     }
-    // println!("labelize wrapped {}", s);
     match _labelize(s.clone()).await {
         Ok(out) => out,
         Err(err) => {
-            eprintln!("error when parsing {}: {:?}", s, err);
+            warn!("error when parsing {}: {:?}", s, err);
             StringType::String(s)
         }
     }
@@ -228,7 +220,7 @@ async fn _labelize_wrapped(s: String) -> StringType {
 
 #[async_recursion]
 async fn _labelize_json(v: Value) -> SimpleValue {
-    // println!("_labelize_json_wrapped {}", v);
+    trace!("_labelize_json {}", v);
     match v {
         Value::Null => unimplemented!(),
         Value::Bool(_b) => unimplemented!(),
@@ -251,6 +243,7 @@ async fn _labelize_json(v: Value) -> SimpleValue {
 const DEFAULT_LANGS: [&str; 3] = ["Z1830", "Z1006", "Z1002"];
 
 fn request_wrapper(req_body: String) -> Result<(Value, Vec<String>), HttpResponse> {
+    debug!("parsing req body");
     let v: Value = match serde_json::from_str(&req_body) {
         Ok(v) => v,
         Err(_) => {
@@ -301,6 +294,7 @@ fn request_wrapper(req_body: String) -> Result<(Value, Vec<String>), HttpRespons
 
 #[post("/labelize")]
 async fn labelize_route(req_body: String) -> impl Responder {
+    info!("labelize route");
     let (val, langs) = match request_wrapper(req_body) {
         Ok((val, langs)) => (val, langs),
         Err(r) => return r,
@@ -311,6 +305,7 @@ async fn labelize_route(req_body: String) -> impl Responder {
 
 #[post("/debug")]
 async fn debug_route(req_body: String) -> impl Responder {
+    info!("debug route");
     let (val, langs) = match request_wrapper(req_body) {
         Ok((val, langs)) => (val, langs),
         Err(r) => return r,
@@ -351,6 +346,7 @@ async fn debug_route(req_body: String) -> impl Responder {
 
 #[post("/compactify")]
 async fn compactify_route(req_body: String) -> impl Responder {
+    info!("compactify route");
     let (val, langs) = match request_wrapper(req_body) {
         Ok((val, langs)) => (val, langs),
         Err(r) => return r,
@@ -366,16 +362,30 @@ async fn compactify_route(req_body: String) -> impl Responder {
     HttpResponse::Ok().json(val.choose_lang(&langs))
 }
 
-#[actix_web::main]
-async fn main() -> std::io::Result<()> {
+#[tracing::instrument]
+async fn run_server() -> std::io::Result<()> {
+    let addr: SocketAddr = "127.0.0.1:3939".parse().unwrap();
+    info!("Listening on http://{}", addr);
     HttpServer::new(|| {
         App::new()
-            .service(hello)
+            .wrap(TracingLogger::default())
+            .service(index)
             .service(labelize_route)
             .service(compactify_route)
             .service(debug_route)
     })
-    .bind(("127.0.0.1", 3939))?
+    .bind(addr)?
     .run()
     .await
+}
+
+mod tracing_utils;
+use tracing_utils::init_telemetry;
+
+#[actix_web::main]
+async fn main() -> std::io::Result<()> {
+    init_telemetry();
+
+    run_server().await?;
+    Ok(())
 }
