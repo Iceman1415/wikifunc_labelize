@@ -176,13 +176,16 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
                         .as_str()
                         .ok_or(MyError::SchemaError("value of Z11K1 not a str".to_string()))?
                         .to_string(),
-                    v.get("Z11K2")
-                        .ok_or(MyError::SchemaError(
-                            "no key Z11K1 in item of Z12K1".to_string(),
-                        ))?
-                        .as_str()
-                        .ok_or(MyError::SchemaError("value of Z11K2 not a str".to_string()))?
-                        .to_string(),
+                    format!(
+                        "'{}'",
+                        v.get("Z11K2")
+                            .ok_or(MyError::SchemaError(
+                                "no key Z11K1 in item of Z12K1".to_string(),
+                            ))?
+                            .as_str()
+                            .ok_or(MyError::SchemaError("value of Z11K2 not a str".to_string()))?
+                            .to_string()
+                    ),
                 ))
             })
             .collect::<std::result::Result<_, MyError>>()?;
