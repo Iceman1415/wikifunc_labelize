@@ -12,9 +12,12 @@ const DOMAIN: &str = "https://wikifunctions.beta.wmflabs.org/w";
 #[route("/", method = "GET", method = "POST")]
 async fn index() -> impl Responder {
     info!("index route");
-    HttpResponse::Ok().body(r#"<body>
+    HttpResponse::Ok().body(r#"<!doctype html>
+<html lang=en-US>
+<meta charset=utf8>
+<body>
     <div>
-        <span>Try it out! (TODO)</span>
+        <span><a href="https://documenter.getpostman.com/view/15455445/VUxVq42m">Usage: Postaman documentation</a></span>
         <span><a href="https://github.com/Iceman1415/wikifunc_labelize">Sourcecode</a></span>
     </div>
     <div><h2>GET /</h2><div>This help page</div></div>
@@ -37,6 +40,9 @@ async fn index() -> impl Responder {
     <div><h2>Notes</h2>
         <h3>Follow original HTTP Method</h3>
         <div>POST requests seems to be converted into GET requests on toolforge. The request may then fail if the payload is too large for a GET request. This problem seems to be solved when I enabled the setting for "Redirect with the original HTTP method instead of the default behavior of redirecting with GET."</div>
+        <h3>Processing time</h3>
+        <div>The tool needs to fetch info about all the ZObjects mentioned in the request payload. Depending on the payload, fetching all these information may take 10 seconds or more.</div>
+        <div>The results are cached for 10 minutes.</div>
         <h3>Feedback wanted</h3>
         <div>This tool is still in active development (2022-09-04)</div>
         <div>Please do contact me and provide feedback, if the output is not what you expected.</div>
@@ -46,7 +52,8 @@ async fn index() -> impl Responder {
         <li>wikimedia / phabricator / etc: Iceman1415</li>
         <li>discord: Iceman#7876</li>
     </ul></div>
-</body>"#)
+</body>
+</html>"#)
 }
 
 mod simple_value;
