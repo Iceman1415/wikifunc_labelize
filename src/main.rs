@@ -23,6 +23,10 @@ const DOMAIN: &str = "https://wikifunctions.beta.wmflabs.org/w";
 async fn index() -> impl Responder {
     info!("index route");
     HttpResponse::Ok().body(r#"<body>
+    <div>
+        <span>Try it out! (TODO)</span>
+        <span><a href="https://github.com/Iceman1415/wikifunc_labelize">Sourcecode</a></span>
+    </div>
     <div><h2>GET /</h2><div>This help page</div></div>
     <div><h2>POST /labelize</h2>
         <div>Append human readable labels to all strings in the json body that are ZIDs (Zxxx) or Global Keys (ZxxxKyyy)</div>
@@ -30,7 +34,7 @@ async fn index() -> impl Responder {
         <div>Alternatively you can supply your own order of prefered language in the POST body, like so: <code>{"data": "zobject...", "langs": ["Z1830", "Z1006", "Z1002"]}</code></div>
     </div>
     <div><h2>POST /compacify</h2>
-        <div>This tries to make the ZObject more readable by simplifying its structure.</div>
+        <div>This tries to make the ZObject even more readable by simplifying its structure.</div>
         <div>The main transformation we do is that we "raise" the type (Z1K1) of ZObjects (all ZObjects has its type in the key Z1K1) and the type in Arrays (all Arrays have the type as the first element) upwards. In other words, we separate the type information from the rest of the data. The type information is merged into the key of objects instead.</div>
         <div>We also simplify commonly seen simple objects:<ul>
             <li>String (Z6)</li>
@@ -40,6 +44,18 @@ async fn index() -> impl Responder {
         </ul></div>
         <div>A custom order of prefered language can be provided in the POST body, similar to /labelize</div>
     </div>
+    <div><h2>Notes</h2>
+        <h3>Follow original HTTP Method</h3>
+        <div>POST requests seems to be converted into GET requests on toolforge. The request may then fail if the payload is too large for a GET request. This problem seems to be solved when I enabled the setting for "Redirect with the original HTTP method instead of the default behavior of redirecting with GET."</div>
+        <h3>Feedback wanted</h3>
+        <div>This tool is still in active development (2022-09-04)</div>
+        <div>Please do contact me and provide feedback, if the output is not what you expected.</div>
+    </div>
+    <div><h2>Contact</h2><ul>
+        <li>email: iceman1415@protonmail.com</li>
+        <li>wikimedia / phabricator / etc: Iceman1415</li>
+        <li>discord: Iceman#7876</li>
+    </ul></div>
 </body>"#)
 }
 
