@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use actix_web::dev::Service;
 use actix_web::{error::ResponseError, http::header::ContentType};
-use actix_web::{get, post, App, HttpResponse, HttpServer, Responder};
+use actix_web::{route, App, HttpResponse, HttpServer, Responder};
 use tracing::{debug, info, trace, warn};
 use tracing_actix_web::TracingLogger;
 
@@ -19,7 +19,7 @@ use cached::TimedCache;
 
 const DOMAIN: &str = "https://wikifunctions.beta.wmflabs.org/w";
 
-#[get("/")]
+#[route("/", method = "GET", method = "POST")]
 async fn index() -> impl Responder {
     info!("index route");
     HttpResponse::Ok().body(r#"<body>
@@ -316,7 +316,7 @@ fn request_wrapper(req_body: String) -> Result<(Value, Vec<String>), HttpRespons
     }
 }
 
-#[post("/labelize")]
+#[route("/labelize", method = "GET", method = "POST")]
 async fn labelize_route(req_body: String) -> impl Responder {
     info!("labelize route");
     let (val, langs) = match request_wrapper(req_body) {
@@ -327,7 +327,7 @@ async fn labelize_route(req_body: String) -> impl Responder {
     HttpResponse::Ok().json(val.choose_lang(&langs))
 }
 
-#[post("/debug")]
+#[route("/debug", method = "GET", method = "POST")]
 async fn debug_route(req_body: String) -> impl Responder {
     info!("debug route");
     let (val, langs) = match request_wrapper(req_body) {
@@ -368,7 +368,7 @@ async fn debug_route(req_body: String) -> impl Responder {
     HttpResponse::Ok().json(val.choose_lang(&langs))
 }
 
-#[post("/compactify")]
+#[route("/compactify", method = "GET", method = "POST")]
 async fn compactify_route(req_body: String) -> impl Responder {
     info!("compactify route");
     let (val, langs) = match request_wrapper(req_body) {
