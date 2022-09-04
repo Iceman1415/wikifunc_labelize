@@ -6,6 +6,7 @@ use futures::future;
 use regex::Regex;
 use serde_json::Value;
 
+use actix_web::dev::Service;
 use actix_web::{error::ResponseError, http::header::ContentType};
 use actix_web::{get, post, App, HttpResponse, HttpServer, Responder};
 use tracing::{debug, info, trace, warn};
@@ -391,6 +392,14 @@ async fn run_server() -> std::io::Result<()> {
     info!("Listening on http://{}", addr);
     HttpServer::new(|| {
         App::new()
+            .wrap_fn(|req, srv| {
+                let fut = srv.call(req);
+                async {
+                    info!("recieved request");
+                    let res = fut.await?;
+                    Ok(res)
+                }
+            })
             .wrap(TracingLogger::default())
             .service(index)
             .service(labelize_route)
