@@ -1,10 +1,12 @@
 use std::collections::BTreeSet;
 use std::net::SocketAddr;
 
+use derive_more::Display;
 use futures::future;
 use regex::Regex;
 use serde_json::Value;
 
+use actix_web::{error::ResponseError, http::header::ContentType};
 use actix_web::{get, post, App, HttpResponse, HttpServer, Responder};
 use tracing::{debug, info, trace, warn};
 use tracing_actix_web::TracingLogger;
@@ -12,10 +14,7 @@ use tracing_actix_web::TracingLogger;
 use async_recursion::async_recursion;
 
 use cached::proc_macro::cached;
-// use cached::proc_macro::io_cached;
-// use cached::AsyncRedisCache;
 use cached::TimedCache;
-use thiserror::Error;
 
 const DOMAIN: &str = "https://wikifunctions.beta.wmflabs.org/w";
 
@@ -23,15 +22,22 @@ const DOMAIN: &str = "https://wikifunctions.beta.wmflabs.org/w";
 async fn index() -> impl Responder {
     info!("index route");
     HttpResponse::Ok().body(r#"<body>
-    <div><h2>Get /</h2><div>This help page</div></div>
-    <div><h2>Post /labelize</h2>
+    <div><h2>GET /</h2><div>This help page</div></div>
+    <div><h2>POST /labelize</h2>
         <div>Append human readable labels to all strings in the json body that are ZIDs (Zxxx) or Global Keys (ZxxxKyyy)</div>
         <div>By default, the entire json body is labelized, and the prefered language of human readable labels are in order: Japanese (Z1830), Chinese (Z1006), English (Z1002)</div>
-        <div>Alternatively you can supply your own order of prefered language, like so: <code>{"data": "zobject...", "langs": ["Z1830", "Z1006", "Z1002"]}</code></div>
+        <div>Alternatively you can supply your own order of prefered language in the POST body, like so: <code>{"data": "zobject...", "langs": ["Z1830", "Z1006", "Z1002"]}</code></div>
     </div>
-    <div><h2>Post /compacify</h2>
-        <div>After labelize-ing the json body, we then "raises" the type (Z1K1) of ZObjects (all ZObjects has its type in the key Z1K1) and the type in Arrays (all Arrays have the type as the first element). This makes the json more readable.</div>
-        <div>A custom order of prefered language can be provided similar to /labelize</div>
+    <div><h2>POST /compacify</h2>
+        <div>This tries to make the ZObject more readable by simplifying its structure.</div>
+        <div>The main transformation we do is that we "raise" the type (Z1K1) of ZObjects (all ZObjects has its type in the key Z1K1) and the type in Arrays (all Arrays have the type as the first element) upwards. In other words, we separate the type information from the rest of the data. The type information is merged into the key of objects instead.</div>
+        <div>We also simplify commonly seen simple objects:<ul>
+            <li>String (Z6)</li>
+            <li>Reference (Z9)</li>
+            <li>Monolingual Text (Z11)</li>
+            <li>other objects that only have one key-value pair</li>
+        </ul></div>
+        <div>A custom order of prefered language can be provided in the POST body, similar to /labelize</div>
     </div>
 </body>"#)
 }
@@ -46,32 +52,49 @@ mod compact_key;
 mod compact_value;
 use compact_value::CompactValue;
 
-#[derive(Error, Debug, PartialEq, Clone)]
+#[derive(Debug, PartialEq, Clone, Display)]
 enum MyError {
-    #[error("network error `{0}`")]
+    #[display(fmt = "network error: {}", _0)]
     NetworkError(String),
-    #[error("mismatch in schema between returned data from wikifunction and expectation, `{0}`")]
+    #[display(fmt = "schema error: {}", _0)]
     SchemaError(String),
-    // #[error("error with redis cache `{0}`")]
-    // RedisError(String),
+}
+
+impl ResponseError for MyError {
+    fn status_code(&self) -> reqwest::StatusCode {
+        reqwest::StatusCode::INTERNAL_SERVER_ERROR
+    }
+
+    fn error_response(&self) -> HttpResponse<actix_web::body::BoxBody> {
+        HttpResponse::build(self.status_code())
+            .insert_header(ContentType::html())
+            .body(self.to_string())
+    }
 }
 
 async fn fetch(z_number: &str) -> std::result::Result<Value, MyError> {
     debug!("fetching from wikifunction: {}", z_number);
     match reqwest::get(format!("{}/api.php?action=query&format=json&list=wikilambdaload_zobjects&wikilambdaload_zids={}&wikilambdaload_canonical=true",DOMAIN, z_number)).await {
-        Ok(res) => Ok(
-            serde_json::from_str::<Value>(&res.text().await.unwrap()).expect("failed parsing wikifunction response")
-        .get("query")
-        .expect("no \"query\" key in wikifunction response")
-        .get("wikilambdaload_zobjects")
-        .expect("no \"wikilambdaload_zobjects\" key in wikifunction response")
-        .get(z_number)
-        .expect(    &format!("no key for self ({}) in wikifunction response", z_number))
-        .get("data")
-        .expect("no \"data\" key in wikifunction response")
-        .to_owned()
-        ),
-        Err(x) => {warn!("error fetching {}: {}", z_number, x); Err(MyError::NetworkError(x.to_string()))}
+        Ok(res) => {
+            debug!("fetched from wikifunction: {}", z_number);
+            Ok(
+                serde_json::from_str::<Value>(&res.text().await.unwrap())
+                    .map_err(|_e| MyError::SchemaError("failed parsing wikifunction response".to_string()))?
+                    .get("query")
+                    .ok_or(MyError::SchemaError("no \"query\" key in wikifunction response".to_string()))?
+                    .get("wikilambdaload_zobjects")
+                    .ok_or(MyError::SchemaError("no \"wikilambdaload_zobjects\" key in wikifunction response".to_string()))?
+                    .get(z_number)
+                    .ok_or(MyError::SchemaError(format!("no key for self ({}) in wikifunction response", z_number)))?
+                    .get("data")
+                    .ok_or(MyError::SchemaError("no \"data\" key in wikifunction response".to_string()))?
+                    .to_owned()
+            )
+        },
+        Err(e) => {
+            warn!("error fetching {}: {}", z_number, e); 
+            Err(MyError::NetworkError(e.to_string()))
+        }
     }
 }
 
@@ -364,7 +387,7 @@ async fn compactify_route(req_body: String) -> impl Responder {
 
 #[tracing::instrument]
 async fn run_server() -> std::io::Result<()> {
-    let addr: SocketAddr = "127.0.0.1:3939".parse().unwrap();
+    let addr: SocketAddr = "0.0.0.0:8000".parse().unwrap();
     info!("Listening on http://{}", addr);
     HttpServer::new(|| {
         App::new()
