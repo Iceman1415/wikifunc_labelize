@@ -111,15 +111,15 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
     } else if Regex::new(r"^Z\d+K\d+$").unwrap().is_match(&s) {
         let pat = s.split("K").collect::<Vec<_>>();
         let z_number = pat[0];
-        let k_number = pat[1].parse::<usize>().unwrap();
+        // let k_number = pat[1].parse::<usize>().unwrap();
 
         let res = fetch(z_number).await?;
 
         // example object: Z4, of type Z4
         // example object: Z811, of type Z8
         // example object: Z517, of type Z50
-        // example: Z4 -> obj["Z2K2"]["Z4K2"][k_number]["Z3K3"]["Z12K1"][1]["Z11K2"]
-        // example: Z8 -> obj["Z2K2"]["Z8K1"][k_number]["Z17K3"]["Z12K1"][1]["Z11K2"]
+        // example: Z4K1 -> obj["Z2K2"]["Z4K2"][k_number]["Z3K3"]["Z12K1"][1]["Z11K2"]
+        // example: Z8K1 -> obj["Z2K2"]["Z8K1"][k_number]["Z17K3"]["Z12K1"][1]["Z11K2"]
         // we are trying to get the label for some ZxxxKyyy
         // we have fetched the data for Zxxx
         // first of all, Zxxx is an persistent object because it has a Z-number
@@ -134,24 +134,27 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
                 "value of Z2K2 is not object".to_string(),
             ))?
             .iter()
-            // we now try to find the key-value, where...
-            // the value is an array of objects containing Z12 values
-            .filter(|&(_k, v)| v.is_array())
-            .filter(|&(_k, v)| v.as_array().unwrap().len() > k_number)
-            .map(|(_k, v)| {
-                v.as_array().unwrap()[k_number]
-                    .as_object()
-                    .unwrap()
-                    .iter()
-                    .filter(|&(_k, v)| v.is_object())
-                    .filter(|&(_k, v)| {
-                        v.as_object().unwrap().get("Z1K1")
-                            == Some(&Value::String("Z12".to_string()))
+            // we now try to find the key-value in Z2K2, where the value is an array of objects
+            .filter_map(|(_k, v)| v.as_array())
+            .filter(|v| v.len() > 1 && v[1].is_object())
+            // ...and one of the object has string value of matching ZxxxKyyy
+            // or the object has an object value, which has a string value of matching ZxxxKyyy (one level of indirection)
+            .filter_map(|v| {
+                v.iter().filter_map(|x| x.as_object()).find(|o| {
+                    o.iter().any(|(_k, v)| match v {
+                        Value::String(vs) => vs.clone() == s,
+                        Value::Object(vo) => {
+                            vo.iter().any(|(_k, vv)| *vv == Value::String(s.clone()))
+                        }
+                        _ => false,
                     })
-                    .next()
-                    .unwrap()
-                    .1
+                })
             })
+            .next()
+            .unwrap()
+            .iter()
+            .filter_map(|(_k, v)| v.as_object())
+            .filter(|o| o.get("Z1K1") == Some(&Value::String("Z12".to_string())))
             .next()
             .unwrap();
 
