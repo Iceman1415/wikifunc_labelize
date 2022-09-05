@@ -7,6 +7,8 @@ use actix_web::{route, App, HttpResponse, HttpServer, Responder};
 use tracing::{debug, info};
 use tracing_actix_web::TracingLogger;
 
+use dotenv::dotenv;
+
 const DOMAIN: &str = "https://wikifunctions.beta.wmflabs.org/w";
 
 #[route("/", method = "GET", method = "POST")]
@@ -225,6 +227,7 @@ use tracing_utils::init_telemetry;
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
+    dotenv().ok();
     init_telemetry();
 
     run_server().await?;

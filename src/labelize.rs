@@ -1,7 +1,6 @@
 use std::collections::BTreeSet;
 
 use derive_more::Display;
-use futures::future;
 use regex::Regex;
 
 use actix_web::HttpResponse;
@@ -10,7 +9,9 @@ use async_recursion::async_recursion;
 use tracing::{debug, trace, warn};
 
 use cached::proc_macro::cached;
-use cached::TimedCache;
+use futures::future::{self, Shared};
+use futures::{Future, FutureExt};
+use std::pin::Pin;
 
 use crate::simple_value::{LabelledNode, SimpleValue, StringType};
 use serde_json::Value;
@@ -37,9 +38,9 @@ impl ResponseError for MyError {
     }
 }
 
-async fn fetch(z_number: &str) -> std::result::Result<Value, MyError> {
+async fn _fetch(z_number: String) -> std::result::Result<Value, MyError> {
     debug!("fetching from wikifunction: {}", z_number);
-    match reqwest::get(format!("{}/api.php?action=query&format=json&list=wikilambdaload_zobjects&wikilambdaload_zids={}&wikilambdaload_canonical=true",DOMAIN, z_number)).await {
+    match reqwest::get(format!("{}/api.php?action=query&format=json&list=wikilambdaload_zobjects&wikilambdaload_zids={}&wikilambdaload_canonical=true", DOMAIN, &z_number)).await {
         Ok(res) => {
             debug!("fetched from wikifunction: {}", z_number);
             Ok(
@@ -49,7 +50,7 @@ async fn fetch(z_number: &str) -> std::result::Result<Value, MyError> {
                     .ok_or(MyError::SchemaError("no \"query\" key in wikifunction response".to_string()))?
                     .get("wikilambdaload_zobjects")
                     .ok_or(MyError::SchemaError("no \"wikilambdaload_zobjects\" key in wikifunction response".to_string()))?
-                    .get(z_number)
+                    .get(&z_number)
                     .ok_or(MyError::SchemaError(format!("no key for self ({}) in wikifunction response", z_number)))?
                     .get("data")
                     .ok_or(MyError::SchemaError("no \"data\" key in wikifunction response".to_string()))?
@@ -63,15 +64,19 @@ async fn fetch(z_number: &str) -> std::result::Result<Value, MyError> {
     }
 }
 
-#[cached(
-    type = "TimedCache<String, std::result::Result<StringType, MyError>>",
-    create = "{ TimedCache:: with_lifespan_and_refresh(600, true) }",
-    convert = r#"{ format!("{}", s) }"#
-)]
+// https://github.com/jaemk/cached/issues/81
+#[cached(time = 600)]
+fn fetch(
+    z_number: String,
+) -> Shared<Pin<Box<dyn Future<Output = std::result::Result<Value, MyError>> + std::marker::Send>>>
+{
+    return _fetch(z_number).boxed().shared();
+}
+
 async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
     trace!("labelize {}", s);
     if Regex::new(r"^Z\d+$").unwrap().is_match(&s) {
-        let readable_labels = fetch(&s)
+        let readable_labels = fetch(s.clone())
             .await?
             .get("Z2K3")
             .ok_or(MyError::SchemaError(
@@ -113,7 +118,7 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
         let z_number = pat[0];
         // let k_number = pat[1].parse::<usize>().unwrap();
 
-        let res = fetch(z_number).await?;
+        let res = fetch(z_number.to_string()).await?;
 
         // example object: Z4, of type Z4
         // example object: Z811, of type Z8

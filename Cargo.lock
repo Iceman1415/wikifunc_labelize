@@ -330,9 +330,9 @@ dependencies = [
 
 [[package]]
 name = "cached"
-version = "0.38.0"
+version = "0.39.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "27e6092f8c7ba6e65a46f6f26d7d7997201d3a6f0e69ff5d2440b930d7c0513a"
+checksum = "f3e27085975166ffaacbd04527132e1cf5906fa612991f9b4fea08e787da2961"
 dependencies = [
  "async-trait",
  "async_once",
@@ -498,6 +498,12 @@ dependencies = [
  "block-buffer",
  "crypto-common",
 ]
+
+[[package]]
+name = "dotenv"
+version = "0.15.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "77c90badedccf4105eca100756a0b1289e191f6fcbdadd3cee1d2f614f97da8f"
 
 [[package]]
 name = "encoding_rs"
@@ -1800,6 +1806,7 @@ dependencies = [
  "async-recursion",
  "cached",
  "derive_more",
+ "dotenv",
  "futures",
  "regex",
  "reqwest",
