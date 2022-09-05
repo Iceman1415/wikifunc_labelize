@@ -45,8 +45,15 @@ pub enum StringType {
 impl StringType {
     pub fn is_labelled(&self, label: &str) -> bool {
         match self {
-            Self::String(s) => s == label,
+            StringType::String(s) => s == label,
             StringType::LabelledNode(n) => n.z_label == label,
+        }
+    }
+
+    pub fn to_raw(self) -> String {
+        match self {
+            StringType::String(s) => s,
+            StringType::LabelledNode(n) => n.z_label,
         }
     }
 

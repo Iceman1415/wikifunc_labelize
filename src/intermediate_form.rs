@@ -198,7 +198,7 @@ impl IntermediateForm {
                     IntermediateForm::StringType(
                         match &obj.iter().find(|(k, _v)| k.is_labelled("Z9K1")).unwrap().1 {
                             IntermediateForm::StringType(s) => s.clone(),
-                            _ => todo!(),
+                            _ => todo!("non-string value for Z9K1"),
                         },
                     )
                 } else {
@@ -227,11 +227,20 @@ impl IntermediateForm {
     pub fn compress_string(self) -> Self {
         match self {
             IntermediateForm::TypedObject(IntermediateType::Simple(typ), obj) => {
+                // if the object has type String (Z6)
                 if typ.is_labelled("Z6") {
                     IntermediateForm::StringType(
-                        match &obj.iter().find(|(k, _v)| k.is_labelled("Z6K1")).unwrap().1 {
-                            IntermediateForm::StringType(s) => s.clone(),
-                            _ => todo!(),
+                        // there should be key Z6K1 containing the actual string
+                        match obj
+                            .into_iter()
+                            .find(|(k, _v)| k.is_labelled("Z6K1"))
+                            .unwrap()
+                            .1
+                        {
+                            // if the string is labelled, it should not be, we turn it back to a normal string
+                            IntermediateForm::StringType(s) => StringType::String(s.to_raw()),
+                            // ...wait can it be a function call?
+                            _ => todo!("non-string value for Z6K1"),
                         },
                     )
                 } else {
@@ -259,7 +268,7 @@ impl IntermediateForm {
 
     pub fn compress_monolingual(self) -> Self {
         // we transform objects of type Z11 (Monolingual Text),
-        // into only a TypeLabelledNode of
+        // into a TypeLabelledNode of
         // key: the actual text, value of Z11K2
         // type: the language, value of Z11K1
         match self {

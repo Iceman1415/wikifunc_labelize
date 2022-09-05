@@ -116,6 +116,7 @@ impl From<IntermediateForm> for CompactValue {
 }
 
 impl CompactValue {
+    // If an object only has one key-value pair, I want to lift that key upwards too, similar to how types info are lifted
     pub fn compress_simple_classes(self) -> Self {
         match self {
             CompactValue::KeyType(_) => self,
