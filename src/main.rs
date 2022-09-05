@@ -18,7 +18,7 @@ async fn index() -> impl Responder {
 <html lang=en-US>
 <meta charset=utf8>
 <body>
-    <div><h1>Wikifunction Labelize - Making ZObjects human readable</h1></div>
+    <div><h1>Wikifunction Labelize - API for Making ZObjects Human Readable</h1></div>
     <div><h2>Links</h2>
         <span><a href="https://documenter.getpostman.com/view/15455445/VUxVq42m">Usage: Postaman documentation</a></span>
         <span><a href="https://github.com/Iceman1415/wikifunc_labelize">Sourcecode</a></span>
