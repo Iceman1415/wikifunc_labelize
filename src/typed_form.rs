@@ -73,11 +73,8 @@ impl TryFrom<SimpleValue> for Type {
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum TypedForm {
     StringType(StringType),
-    // It would be great if I can distinguish typed array (Benjamin arrays) from regular untyped json arrays,
-    // but the only way to distinguish them is to infer the type of the elements by comparing the "shape",
-    // which is quite complicated...
-    // Array(Vec<TypedForm>),
-    Array(Type, Vec<TypedForm>),
+    Array(Vec<TypedForm>),
+    TypedArray(Type, Vec<TypedForm>),
     // All ZObjects should have a type, but just in case...
     Object(TypedObjectType),
     TypedObject(Type, TypedObjectType),
@@ -87,13 +84,19 @@ impl From<SimpleValue> for TypedForm {
     fn from(val: SimpleValue) -> Self {
         match val {
             SimpleValue::StringType(s) => Self::StringType(s),
+            // TODO: distinguish typed array (Benjamin arrays) from regular untyped json arrays,
             SimpleValue::Array(v) => {
                 // we're assuming all arrays are "Benjamin arrays"
                 // see: https://meta.wikimedia.org/wiki/Abstract_Wikipedia/Updates/2022-07-29
-                let typ = Type::try_from(v[0].clone()).expect(
-                    "the first item of an ZObject array should be the type of the elements",
-                );
-                Self::Array(typ, v.into_iter().skip(1).map(|x| x.into()).collect())
+                if v.len() == 0 {
+                    return Self::Array(v.into_iter().skip(1).map(|x| x.into()).collect());
+                }
+                match Type::try_from(v[0].clone()) {
+                    Ok(typ) => {
+                        Self::TypedArray(typ, v.into_iter().skip(1).map(|x| x.into()).collect())
+                    }
+                    Err(_) => Self::Array(v.into_iter().skip(1).map(|x| x.into()).collect()),
+                }
             }
             SimpleValue::Object(o) => {
                 let z1k1 = o
@@ -125,7 +128,10 @@ impl TypedForm {
     pub fn choose_lang(self, langs: &Vec<String>) -> Value {
         match self {
             TypedForm::StringType(s) => s.choose_lang(langs).into(),
-            TypedForm::Array(typ, v) => Value::Array(
+            TypedForm::Array(v) => {
+                Value::Array(v.into_iter().map(|x| x.choose_lang(langs)).collect())
+            }
+            TypedForm::TypedArray(typ, v) => Value::Array(
                 std::iter::once(typ.choose_lang(langs))
                     .chain(v.into_iter().map(|x| x.choose_lang(langs)))
                     .collect(),

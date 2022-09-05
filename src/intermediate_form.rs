@@ -44,9 +44,9 @@ impl IntermediateType {
 pub enum IntermediateForm {
     StringType(StringType),
     LabelledNode(StringType, SimpleType),
-    Array(IntermediateType, Vec<IntermediateForm>),
+    Array(Vec<IntermediateForm>),
+    TypedArray(IntermediateType, Vec<IntermediateForm>),
     Object(IntermediateObjectType),
-    // in the intermediate form, we pull the type of objects out
     TypedObject(IntermediateType, IntermediateObjectType),
 }
 
@@ -54,8 +54,9 @@ impl From<TypedForm> for IntermediateForm {
     fn from(val: TypedForm) -> Self {
         match val {
             TypedForm::StringType(s) => Self::StringType(s),
-            TypedForm::Array(typ, arr) => {
-                Self::Array(typ.into(), arr.into_iter().map(|x| x.into()).collect())
+            TypedForm::Array(arr) => Self::Array(arr.into_iter().map(|x| x.into()).collect()),
+            TypedForm::TypedArray(typ, arr) => {
+                Self::TypedArray(typ.into(), arr.into_iter().map(|x| x.into()).collect())
             }
             TypedForm::Object(obj) => {
                 Self::Object(obj.into_iter().map(|(k, v)| (k, v.into())).collect())
@@ -167,7 +168,7 @@ impl IntermediateType {
 impl IntermediateForm {
     pub fn drop_array_item_types(self) -> Self {
         match self {
-            IntermediateForm::Array(typ, v) => IntermediateForm::Array(
+            IntermediateForm::TypedArray(typ, v) => IntermediateForm::TypedArray(
                 typ,
                 v.into_iter()
                     .map(|x| match x {
@@ -177,6 +178,9 @@ impl IntermediateForm {
                         _ => x.drop_array_item_types(),
                     })
                     .collect(),
+            ),
+            IntermediateForm::Array(arr) => IntermediateForm::Array(
+                arr.into_iter().map(|x| x.drop_array_item_types()).collect(),
             ),
             IntermediateForm::Object(obj) => IntermediateForm::Object(drop_array_item_types(obj)),
             IntermediateForm::TypedObject(t, o) => {
@@ -209,7 +213,10 @@ impl IntermediateForm {
             }
             IntermediateForm::StringType(_) => self,
             IntermediateForm::LabelledNode(_, _) => self,
-            IntermediateForm::Array(typ, v) => IntermediateForm::Array(
+            IntermediateForm::Array(v) => {
+                IntermediateForm::Array(v.into_iter().map(|x| x.compress_reference()).collect())
+            }
+            IntermediateForm::TypedArray(typ, v) => IntermediateForm::TypedArray(
                 typ.compress_reference(),
                 v.into_iter().map(|x| x.compress_reference()).collect(),
             ),
@@ -239,7 +246,10 @@ impl IntermediateForm {
             }
             IntermediateForm::StringType(_) => self,
             IntermediateForm::LabelledNode(_, _) => self,
-            IntermediateForm::Array(typ, v) => IntermediateForm::Array(
+            IntermediateForm::Array(v) => {
+                IntermediateForm::Array(v.into_iter().map(|x| x.compress_string()).collect())
+            }
+            IntermediateForm::TypedArray(typ, v) => IntermediateForm::TypedArray(
                 typ.compress_string(),
                 v.into_iter().map(|x| x.compress_string()).collect(),
             ),
@@ -282,7 +292,10 @@ impl IntermediateForm {
             }
             IntermediateForm::StringType(_) => self,
             IntermediateForm::LabelledNode(_, _) => self,
-            IntermediateForm::Array(typ, v) => IntermediateForm::Array(
+            IntermediateForm::Array(v) => {
+                IntermediateForm::Array(v.into_iter().map(|x| x.compress_monolingual()).collect())
+            }
+            IntermediateForm::TypedArray(typ, v) => IntermediateForm::TypedArray(
                 typ.compress_monolingual(),
                 v.into_iter().map(|x| x.compress_monolingual()).collect(),
             ),
@@ -299,7 +312,10 @@ impl IntermediateForm {
             IntermediateForm::LabelledNode(s, t) => {
                 format!("{} [{}]", s.choose_lang(langs), t.0.choose_lang(langs),).into()
             }
-            IntermediateForm::Array(typ, v) => Value::Array(
+            IntermediateForm::Array(v) => {
+                Value::Array((v.into_iter().map(|x| x.choose_lang(langs))).collect())
+            }
+            IntermediateForm::TypedArray(typ, v) => Value::Array(
                 std::iter::once(typ.choose_lang(langs))
                     .chain(v.into_iter().map(|x| x.choose_lang(langs)))
                     .collect(),

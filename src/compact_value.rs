@@ -6,7 +6,7 @@ use crate::compact_key::{CompactKey, SimpleType};
 use crate::intermediate_form::{IntermediateForm, IntermediateType};
 use crate::simple_value::{SimpleValue, StringType};
 
-// CompactValue is the final type, ready to be transformed back to json Value
+// CompactValue is the final type, ready to be converted back to json Value
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum CompactValue {
     KeyType(CompactKey),
@@ -54,10 +54,13 @@ impl From<IntermediateForm> for CompactValue {
             IntermediateForm::LabelledNode(s, t) => {
                 CompactValue::KeyType(CompactKey::StringType(s, vec![t]))
             }
-            IntermediateForm::Array(IntermediateType::Simple(_), v) => {
+            IntermediateForm::Array(v) => {
                 CompactValue::Array(v.into_iter().map(|x| x.into()).collect())
             }
-            IntermediateForm::Array(IntermediateType::WithArgs(_typ, type_args), v) => {
+            IntermediateForm::TypedArray(IntermediateType::Simple(_), v) => {
+                CompactValue::Array(v.into_iter().map(|x| x.into()).collect())
+            }
+            IntermediateForm::TypedArray(IntermediateType::WithArgs(_typ, type_args), v) => {
                 CompactValue::Array(
                     std::iter::once(IntermediateForm::Object(type_args).into())
                         .chain(v.into_iter().map(|x| x.into()))
@@ -78,7 +81,7 @@ impl From<IntermediateForm> for CompactValue {
                                 rebuild_obj_with_type_args(obj, type_args),
                             ),
                         },
-                        IntermediateForm::Array(typ, v) => match typ {
+                        IntermediateForm::TypedArray(typ, v) => match typ {
                             IntermediateType::Simple(typ) => (
                                 CompactKey::StringType(k, vec![SimpleType(typ)]),
                                 CompactValue::Array(v.into_iter().map(|x| x.into()).collect()),
