@@ -12,12 +12,20 @@ use dotenv::dotenv;
 
 const DOMAIN: &str = "https://wikifunctions.org/w";
 
-#[route("/", method = "GET", method = "POST")]
+#[route("/", method = "GET")]
 async fn index() -> impl Responder {
-    info!("index route");
+    info!("get index page");
     HttpResponse::Ok()
         .append_header(header::ContentType::html())
         .body(include_str!("../static/index.html"))
+}
+
+#[route("/editor", method = "GET")]
+async fn editor() -> impl Responder {
+    info!("get editor page");
+    HttpResponse::Ok()
+        .append_header(header::ContentType::html())
+        .body(include_str!("../static/editor.html"))
 }
 
 mod simple_value;
@@ -171,6 +179,7 @@ async fn run_server() -> std::io::Result<()> {
             })
             .wrap(TracingLogger::default())
             .service(index)
+            .service(editor)
             .service(labelize_route)
             .service(compactify_route)
             .service(debug_route)

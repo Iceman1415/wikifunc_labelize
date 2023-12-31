@@ -1,0 +1,688 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Wikifunction Labelize Tool</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.js"
+      integrity="sha512-8RnEqURPUc5aqFEN04aQEiPlSAdE0jlFS/9iGgUyNtwFnSKCXhmB6ZTNl7LnDtDWKabJIASzXrzD0K+LYexU9g=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
+    <script
+      src="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/mode/javascript/javascript.min.js"
+      integrity="sha512-I6CdJdruzGtvDyvdO4YsiAq+pkWf2efgd1ZUSK2FnM/u2VuRASPC7GowWQrWyjxCZn6CT89s3ddGI+be0Ak9Fg=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    ></script>
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/codemirror.min.css"
+      integrity="sha512-uf06llspW44/LZpHzHT6qBOIVODjWtv4MxCricRxkzvopAlSWnTf6hpZTFxuuZcuNE9CBQhqE0Seu1CoRk84nQ=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/theme/base16-dark.min.css"
+      integrity="sha512-CNZkbIVu/G4dB3YpFIZgMtE45vHp/QocgMbf6jg+DFFPLN3emncIob8ubKANmsGQ8JsnzzSVTj7WrFrnx6EgXQ=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <link
+      rel="stylesheet"
+      href="https://cdnjs.cloudflare.com/ajax/libs/codemirror/6.65.7/theme/base16-dark.min.css"
+      integrity="sha512-CNZkbIVu/G4dB3YpFIZgMtE45vHp/QocgMbf6jg+DFFPLN3emncIob8ubKANmsGQ8JsnzzSVTj7WrFrnx6EgXQ=="
+      crossorigin="anonymous"
+      referrerpolicy="no-referrer"
+    />
+    <style>
+      body {
+        margin: 8px;
+        color: #100f0f;
+        background: #fffcf0;
+      }
+      a {
+        color: #205ea6;
+      }
+      a:visited {
+        color: #5e409d;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #100f0f;
+          color: #cecdc3;
+        }
+        a {
+          color: #4385be;
+        }
+        a:visited {
+          color: #8b7ec8;
+        }
+      }
+
+      header {
+        height: 50px;
+        padding: 4px;
+        font-size: 24px;
+      }
+
+      main {
+        height: calc(100svh - 50px - 4px * 2 - 8px * 2);
+      }
+      h1 {
+        display: inline-block;
+        font-size: 36px;
+        height: 48px;
+        margin: 0;
+        padding-bottom: 12px;
+        padding-right: 12px;
+      }
+      @media screen and (max-width: 800px) {
+        main {
+          display: grid;
+          grid-template-rows: 1fr 1fr;
+        }
+        .CodeMirror {
+          height: calc(
+            (100svh - 50px - 4px * 2 - 8px * 2) / 2 - 48px - 12px - 24px
+          );
+          width: calc(100svw - 4px * 2 - 8px * 2);
+        }
+      }
+      @media screen and (min-width: 800px) {
+        main {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+        }
+        .CodeMirror {
+          height: calc(
+            (100svh - 50px - 4px * 2 - 8px * 2) - 48px - 12px - 24px
+          );
+          width: calc((100svw - 4px * 2) / 2 - 8px * 2);
+        }
+      }
+      button {
+        display: inline-block;
+      }
+      main > div {
+        margin: 4px;
+      }
+    </style>
+  </head>
+  <body>
+    <header>
+      <a href="/">Back</a>
+    </header>
+    <main>
+      <div>
+        <h1>Input</h1>
+        <button onclick="pretty()">Prettify Input</button>
+        <button onclick="labelize()">Labelize</button>
+        <button onclick="compactify()">Compactify</button>
+        <slot id="input-editor"></slot>
+      </div>
+      <div>
+        <h1>Output</h1>
+        <slot id="output-editor"></slot>
+      </div>
+    </main>
+    <script>
+      const theme = window.matchMedia("(prefers-color-scheme: dark)").matches
+        ? "base16-dark"
+        : "base16-light";
+      const example = {
+        Z4: {
+          success: "",
+          data: {
+            Z1K1: "Z2",
+            Z2K1: {
+              Z1K1: "Z6",
+              Z6K1: "Z4",
+            },
+            Z2K2: {
+              Z1K1: "Z4",
+              Z4K1: "Z4",
+              Z4K2: [
+                "Z3",
+                {
+                  Z1K1: "Z3",
+                  Z3K1: "Z4",
+                  Z3K2: "Z4K1",
+                  Z3K3: {
+                    Z1K1: "Z12",
+                    Z12K1: [
+                      "Z11",
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1002",
+                        Z11K2: "identity",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1025",
+                        Z11K2: "tożsamość",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1011",
+                        Z11K2: "পরিচয়",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1592",
+                        Z11K2: "id",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1006",
+                        Z11K2: "身份",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1062",
+                        Z11K2: "identita",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1186",
+                        Z11K2: "זהות",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1430",
+                        Z11K2: "Identität",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1113",
+                        Z11K2: "identity",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1625",
+                        Z11K2: "fanondro",
+                      },
+                    ],
+                  },
+                },
+                {
+                  Z1K1: "Z3",
+                  Z3K1: {
+                    Z1K1: "Z7",
+                    Z7K1: "Z881",
+                    Z881K1: "Z3",
+                  },
+                  Z3K2: "Z4K2",
+                  Z3K3: {
+                    Z1K1: "Z12",
+                    Z12K1: [
+                      "Z11",
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1002",
+                        Z11K2: "keys",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1025",
+                        Z11K2: "cechy",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1011",
+                        Z11K2: "নির্দেশকসমূহ",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1592",
+                        Z11K2: "attribut",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1006",
+                        Z11K2: "键",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1062",
+                        Z11K2: "klíče",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1186",
+                        Z11K2: "מפתחות",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1430",
+                        Z11K2: "Schlüssel",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1113",
+                        Z11K2: "keys",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1625",
+                        Z11K2: "lakile",
+                      },
+                    ],
+                  },
+                },
+                {
+                  Z1K1: "Z3",
+                  Z3K1: "Z8",
+                  Z3K2: "Z4K3",
+                  Z3K3: {
+                    Z1K1: "Z12",
+                    Z12K1: [
+                      "Z11",
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1002",
+                        Z11K2: "validator",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1025",
+                        Z11K2: "walidator",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1011",
+                        Z11K2: "বৈধকারী",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1006",
+                        Z11K2: "验证器",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1062",
+                        Z11K2: "validátor",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1592",
+                        Z11K2: "utvärderare",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1186",
+                        Z11K2: "בודק תקינות",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1430",
+                        Z11K2: "Prüfer",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1113",
+                        Z11K2: "validator",
+                      },
+                      {
+                        Z1K1: "Z11",
+                        Z11K1: "Z1625",
+                        Z11K2: "mpanaiky",
+                      },
+                    ],
+                  },
+                },
+              ],
+              Z4K3: "Z104",
+            },
+            Z2K3: {
+              Z1K1: "Z12",
+              Z12K1: [
+                "Z11",
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1002",
+                  Z11K2: "Type",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1011",
+                  Z11K2: "ধরন",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1830",
+                  Z11K2: "型",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1657",
+                  Z11K2: "ਕਿਸਮ",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1083",
+                  Z11K2: "قسم",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1025",
+                  Z11K2: "Typ",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1592",
+                  Z11K2: "Datatyp",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1430",
+                  Z11K2: "Typ",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1787",
+                  Z11K2: "Tipo",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1062",
+                  Z11K2: "Typ",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1005",
+                  Z11K2: "тип данных",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1006",
+                  Z11K2: "类型",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1576",
+                  Z11K2: "tipo",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1709",
+                  Z11K2: "Tips",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1186",
+                  Z11K2: "טיפוס",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1048",
+                  Z11K2: "Kiểu dữ liệu",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1157",
+                  Z11K2: "type",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1227",
+                  Z11K2: "Type",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1004",
+                  Z11K2: "Type",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1851",
+                  Z11K2: "ชนิด",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1298",
+                  Z11K2: "Tipu",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1381",
+                  Z11K2: "Tipo",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1488",
+                  Z11K2: "typ",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1237",
+                  Z11K2: "Tip",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1332",
+                  Z11K2: "Тип",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1113",
+                  Z11K2: "Type",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1625",
+                  Z11K2: "Karazana",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1051",
+                  Z11K2: "Tyyppi",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1151",
+                  Z11K2: "ꯃꯈꯜ",
+                },
+              ],
+            },
+            Z2K4: {
+              Z1K1: "Z32",
+              Z32K1: [
+                "Z31",
+                {
+                  Z1K1: "Z31",
+                  Z31K1: "Z1011",
+                  Z31K2: ["Z6", "টাইপ", "প্রকার"],
+                },
+                {
+                  Z1K1: "Z31",
+                  Z31K1: "Z1005",
+                  Z31K2: ["Z6", "тип", "тип переменной"],
+                },
+                {
+                  Z1K1: "Z31",
+                  Z31K1: "Z1186",
+                  Z31K2: ["Z6", "סוג"],
+                },
+                {
+                  Z1K1: "Z31",
+                  Z31K1: "Z1048",
+                  Z31K2: ["Z6", "Loại", "Kiểu"],
+                },
+                {
+                  Z1K1: "Z31",
+                  Z31K1: "Z1592",
+                  Z31K2: ["Z6", "Typ"],
+                },
+              ],
+            },
+            Z2K5: {
+              Z1K1: "Z12",
+              Z12K1: [
+                "Z11",
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1002",
+                  Z11K2: "A class of Z1/Object, with a set list of Z3/Keys.",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1011",
+                  Z11K2:
+                    "Z1/বস্তুর শ্রেণি, যার মধ্যে Z3/নির্দেশকের ধ্রুবক তালিকা",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1830",
+                  Z11K2:
+                    "Z1/オブジェクトのクラスで、Z3/キーのセットリストを持つ。",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1025",
+                  Z11K2:
+                    "Klasa obiektów (Z1), która składa się z listy cech (Z3)",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1787",
+                  Z11K2:
+                    "Una classe di Z1/Oggetti, con un insieme di Z3/Chiavi",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1062",
+                  Z11K2: "Třída Z1/Objektů, definující seznam Z3/Klíčů.",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1576",
+                  Z11K2: "klaso de Z1/objekto, kun fiksa listo de Z3/ŝlosiloj",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1430",
+                  Z11K2:
+                    "Klasse des Objekts mit einer festgelegten Liste von Schlüsseln",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1592",
+                  Z11K2:
+                    "en klass objekt (Z1) med en fastslagen lista med attribut (Z3)",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1157",
+                  Z11K2:
+                    "een klasse van Z1/object, met een lijst van Z3/sleutels",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1048",
+                  Z11K2:
+                    "Một lớp đối tượng (Z1) với một tập hợp cố định các khoá (Z3)",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1004",
+                  Z11K2:
+                    "Une classe d' Z3/Objet constituée d'une liste de Z3/Clés",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1298",
+                  Z11K2: "Na classi di Z1/Uggetti, c'unu nzemi di Z3/Chiavi",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1381",
+                  Z11K2:
+                    "Uma classe de Z1/Objeto, com uma lista definida de Z3/Chaves.",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1237",
+                  Z11K2:
+                    "Z3/Keys'ten oluşan bir liste içeren bir Z1/Object sınıfı.",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1113",
+                  Z11K2: "A class of Z1/Object, with a set list of Z3/Keys.",
+                },
+                {
+                  Z1K1: "Z11",
+                  Z11K1: "Z1851",
+                  Z11K2: "ชั้นของ Z1/วัตถุ พร้อมรายการของ Z3/คีย์ที่กำหนดไว้",
+                },
+              ],
+            },
+          },
+        },
+      };
+      const input_editor = CodeMirror(document.getElementById("input-editor"), {
+        value: JSON.stringify(example, null, 2),
+        mode: "application/json",
+        lineNumbers: true,
+        theme,
+      });
+      const output_editor = CodeMirror(
+        document.getElementById("output-editor"),
+        {
+          value: "",
+          mode: "application/json",
+          lineNumbers: true,
+          theme,
+        }
+      );
+
+      function pretty() {
+        input_editor.setValue(
+          JSON.stringify(JSON.parse(input_editor.getValue()), null, 2)
+        );
+      }
+      function labelize() {
+        fetch("/labelize", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: input_editor.getValue(),
+        }).then((res) => {
+          console.log(res);
+          res.text().then((json) => {
+            try {
+              // prettify the json
+              output_editor.setValue(JSON.stringify(JSON.parse(json), null, 2));
+            } catch (e) {
+              console.error("failed parsing", json);
+              console.error(e);
+            }
+          });
+        });
+      }
+      function compactify() {
+        fetch("/compactify", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: input_editor.getValue(),
+        }).then((res) => {
+          console.log(res);
+          res.text().then((json) => {
+            try {
+              output_editor.setValue(JSON.stringify(JSON.parse(json), null, 2));
+            } catch (e) {
+              console.error("failed parsing", json);
+              console.error(e);
+            }
+          });
+        });
+      }
+    </script>
+  </body>
+</html>
