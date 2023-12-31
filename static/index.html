@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Wikifunction Labelize Tool</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="og:title" content="Wikifunction Labelize Tool" />
+    <meta name="og:description" content="API for Making Wikifunction ZObjects Human Readable" />
+    <style>
+      body {
+        max-width: 800px;
+        margin: 0 auto;
+      }
+      body {
+        color: #100f0f;
+        background: #fffcf0;
+      }
+      a {
+        color: #205ea6;
+      }
+      a:visited {
+        color: #5e409d;
+      }
+      @media (prefers-color-scheme: dark) {
+        body {
+          background: #100f0f;
+          color: #cecdc3;
+        }
+        a {
+          color: #4385be;
+        }
+        a:visited {
+          color: #8b7ec8;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Wikifunction Labelize - API for Making ZObjects Human Readable</h1>
+
+    <h2>Links</h2>
+    <ul>
+      <li>
+        <a href="https://documenter.getpostman.com/view/15455445/VUxVq42m"
+          >Usage: Postaman documentation</a
+        >
+      </li>
+      <li>
+        <a href="https://github.com/Iceman1415/wikifunc_labelize">Sourcecode</a>
+      </li>
+    </ul>
+
+    <h2>GET /</h2>
+    <p>This help page</p>
+
+    <h2>POST /labelize</h2>
+    <p>
+      Append human readable labels to all strings in the json body that are ZIDs
+      (Zxxx) or Global Keys (ZxxxKyyy)
+    </p>
+    <p>
+      By default, the prefered languages of labels used are, in order: Japanese
+      (Z1830), Chinese (Z1006), English (Z1002). This default value is to test
+      and show that the language switching function works.
+    </p>
+    <p>
+      Alternatively you can supply your own order of prefered language in the
+      POST body, like so:
+      <code>{"data": "zobject...", "langs": ["Z1830", "Z1006", "Z1002"]}</code>
+    </p>
+
+    <h2>POST /compacify</h2>
+    <p>
+      This tries to make the ZObject even more readable by simplifying its
+      structure.
+    </p>
+    <p>
+      The main transformation we do is that we "raise" the type (Z1K1) of
+      ZObjects (all ZObjects has its type in the key Z1K1) and the type in
+      Arrays (all Arrays have the type as the first element) upwards, into the
+      parent object's key.
+    </p>
+    <p>
+      In other words, we separate the type information from the rest of the
+      data. The type information is merged into the key of objects instead.
+    </p>
+    <p>
+      Similarly, if an objects only have one key-value pair, the key is merged
+      upward.
+    </p>
+    <p>We also simplify commonly seen simple objects:</p>
+    <ul>
+      <li>String (Z6),</li>
+      <li>Reference (Z9),</li>
+      <li>Monolingual Text (Z11)</li>
+    </ul>
+    <p>
+      A custom order of prefered language can be provided in the POST body,
+      similar to /labelize
+    </p>
+
+    <h2>Notes</h2>
+
+    <h3>Follow original HTTP Method</h3>
+    <p>
+      When using Postman, POST requests seems to be converted into GET requests
+      on toolforge. The request may then fail if the payload is too large for a
+      GET request. This problem seems to be solved when I enabled the setting
+      for "Redirect with the original HTTP method instead of the default
+      behavior of redirecting with GET."
+    </p>
+
+    <h3>Processing time</h3>
+    <p>
+      The tool needs to fetch info about all the ZIDs mentioned in the request
+      payload from wikifunction. Depending on the size of request, fetching all
+      these information may take 10 seconds or more.
+    </p>
+    <p>
+      Fetched results are cached for 10 minutes, so there may be a delay between
+      changes in wikifunction, and results returned from this tool.
+    </p>
+
+    <h3>Feedback wanted</h3>
+    <p>This tool is still in active development (2022-09-05)</p>
+    <p>Please do contact me and provide feedback for:</p>
+    <ul>
+      <li>Unexpected output</li>
+      <li>Bugs and errors</li>
+      <li>feature suggestions</li>
+    </ul>
+
+    <h2>Contact</h2>
+    <ul>
+      <li>email: iceman1415@protonmail.com</li>
+      <li>wikimedia / phabricator / etc: Iceman1415</li>
+      <li>discord: iceman1415</li>
+    </ul>
+  </body>
+</html>
