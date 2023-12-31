@@ -10,7 +10,7 @@ use tracing_actix_web::TracingLogger;
 
 use dotenv::dotenv;
 
-const DOMAIN: &str = "https://wikifunctions.beta.wmflabs.org/w";
+const DOMAIN: &str = "https://wikifunctions.org/w";
 
 #[route("/", method = "GET", method = "POST")]
 async fn index() -> impl Responder {
@@ -32,8 +32,8 @@ use compact_value::CompactValue;
 mod labelize;
 use labelize::labelize;
 
-// the 3 languages (scripts) that I can read, arranged by ascending usage
-const DEFAULT_LANGS: [&str; 3] = ["Z1830", "Z1006", "Z1002"];
+// default to english only
+const DEFAULT_LANGS: [&str; 1] = ["Z1002"];
 
 fn request_wrapper(req_body: String) -> Result<(Value, Vec<String>), HttpResponse> {
     debug!("parsing req body");
