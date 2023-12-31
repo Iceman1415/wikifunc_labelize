@@ -15,7 +15,9 @@ const DOMAIN: &str = "https://wikifunctions.beta.wmflabs.org/w";
 #[route("/", method = "GET", method = "POST")]
 async fn index() -> impl Responder {
     info!("index route");
-    HttpResponse::Ok().append_header(header::ContentType::html()).body(include_str!("../static/index.html"))
+    HttpResponse::Ok()
+        .append_header(header::ContentType::html())
+        .body(include_str!("../static/index.html"))
 }
 
 mod simple_value;
@@ -53,7 +55,7 @@ fn request_wrapper(req_body: String) -> Result<(Value, Vec<String>), HttpRespons
                 match obj.get("langs").unwrap() {
                     Value::Array(langs) => {
                         let langs: Vec<String> = langs
-                            .into_iter()
+                            .iter()
                             .map(|x| match x {
                                 Value::String(s) => Ok(s.clone()),
                                 _ => Err(HttpResponse::BadRequest()

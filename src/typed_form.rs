@@ -16,7 +16,7 @@ impl Type {
             Type::Simple(k) => k.choose_lang(langs).into(),
             Type::WithArgs(typ, args) => {
                 json!({"type": typ.choose_lang(langs), "args": Value::Object(
-                    args.into_iter().map(|(k,v)| (k.choose_lang(langs).into(), v.choose_lang(langs))).collect()
+                    args.into_iter().map(|(k,v)| (k.choose_lang(langs), v.choose_lang(langs))).collect()
                 )})
             }
         }
@@ -88,7 +88,7 @@ impl From<SimpleValue> for TypedForm {
             SimpleValue::Array(v) => {
                 // we're assuming all arrays are "Benjamin arrays"
                 // see: https://meta.wikimedia.org/wiki/Abstract_Wikipedia/Updates/2022-07-29
-                if v.len() == 0 {
+                if v.is_empty() {
                     return Self::Array(v.into_iter().skip(1).map(|x| x.into()).collect());
                 }
                 match Type::try_from(v[0].clone()) {
@@ -99,10 +99,7 @@ impl From<SimpleValue> for TypedForm {
                 }
             }
             SimpleValue::Object(o) => {
-                let z1k1 = o
-                    .iter()
-                    .find(|(k, _v)| k.is_labelled("Z1K1"))
-                    .map(|x| x.clone());
+                let z1k1 = o.iter().find(|(k, _v)| k.is_labelled("Z1K1")).cloned();
                 // if there is a key Z1K1 (type) in the object, we separate it
                 // At a later stage the type will be merged into the parent object's key
                 match z1k1 {

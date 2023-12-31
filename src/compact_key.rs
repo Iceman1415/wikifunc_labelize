@@ -20,10 +20,10 @@ impl From<StringType> for CompactKey {
 }
 
 impl CompactKey {
-    pub fn choose_lang(self, langs: &Vec<String>) -> String {
+    pub fn choose_lang(self, langs: &[String]) -> String {
         match self {
             CompactKey::StringType(key, types) => {
-                if types.len() == 0 {
+                if types.is_empty() {
                     key.choose_lang(langs)
                 } else {
                     format!(
@@ -35,7 +35,6 @@ impl CompactKey {
                             .collect::<Vec<String>>()
                             .join(", "),
                     )
-                    .into()
                 }
             }
             CompactKey::Transient(types) => format!(

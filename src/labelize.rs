@@ -88,7 +88,7 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
             ))?
             .as_array()
             .ok_or(MyError::SchemaError("Z12K1 is not an array".to_string()))?
-            .into_iter()
+            .iter()
             .skip(1)
             .map(|v| -> std::result::Result<(String, String), MyError> {
                 Ok((
@@ -114,7 +114,7 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
             s,
         )))
     } else if Regex::new(r"^Z\d+K\d+$").unwrap().is_match(&s) {
-        let pat = s.split("K").collect::<Vec<_>>();
+        let pat = s.split('K').collect::<Vec<_>>();
         let z_number = pat[0];
         // let k_number = pat[1].parse::<usize>().unwrap();
 
@@ -159,8 +159,7 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
             .unwrap()
             .iter()
             .filter_map(|(_k, v)| v.as_object())
-            .filter(|o| o.get("Z1K1") == Some(&Value::String("Z12".to_string())))
-            .next()
+            .find(|o| o.get("Z1K1") == Some(&Value::String("Z12".to_string())))
             .unwrap();
 
         let readable_labels = label_val
@@ -170,7 +169,7 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
             ))?
             .as_array()
             .ok_or(MyError::SchemaError("Z12K1 is not an array".to_string()))?
-            .into_iter()
+            .iter()
             .skip(1)
             .map(|v| -> std::result::Result<(String, String), MyError> {
                 Ok((
@@ -189,7 +188,6 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
                             ))?
                             .as_str()
                             .ok_or(MyError::SchemaError("value of Z11K2 not a str".to_string()))?
-                            .to_string()
                     ),
                 ))
             })
@@ -205,7 +203,7 @@ async fn _labelize(s: String) -> std::result::Result<StringType, MyError> {
 
 async fn _labelize_wrapped(s: String) -> StringType {
     trace!("labelize wrapped {}", s);
-    if s == "" {
+    if s.is_empty() {
         return StringType::String(s);
     }
     match _labelize(s.clone()).await {
@@ -225,9 +223,7 @@ pub async fn labelize(v: Value) -> SimpleValue {
         Value::Bool(_b) => unimplemented!(),
         Value::Number(_n) => unimplemented!(),
         Value::String(s) => SimpleValue::StringType(_labelize_wrapped(s).await),
-        Value::Array(a) => {
-            SimpleValue::Array(future::join_all(a.into_iter().map(|x| labelize(x))).await)
-        }
+        Value::Array(a) => SimpleValue::Array(future::join_all(a.into_iter().map(labelize)).await),
         Value::Object(o) => SimpleValue::Object(BTreeSet::from_iter(
             future::join_all(
                 o.into_iter()

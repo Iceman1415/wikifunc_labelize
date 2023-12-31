@@ -29,7 +29,7 @@ impl IntermediateType {
             Self::Simple(k) => k.choose_lang(langs).into(),
             Self::WithArgs(typ, args) => {
                 json!({"type": typ.choose_lang(langs), "args": Value::Object(
-                    args.into_iter().map(|(k,v)| (k.choose_lang(langs).into(), v.choose_lang(langs))).collect()
+                    args.into_iter().map(|(k,v)| (k.choose_lang(langs), v.choose_lang(langs))).collect()
                 )})
             }
         }
@@ -238,7 +238,7 @@ impl IntermediateForm {
                             .1
                         {
                             // if the string is labelled, it should not be, we turn it back to a normal string
-                            IntermediateForm::StringType(s) => StringType::String(s.to_raw()),
+                            IntermediateForm::StringType(s) => StringType::String(s.into_raw()),
                             // ...wait can it be a function call?
                             _ => todo!("non-string value for Z6K1"),
                         },

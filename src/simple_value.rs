@@ -17,7 +17,7 @@ impl LabelledNode {
         }
     }
 
-    pub fn choose_lang(self, langs: &Vec<String>) -> String {
+    pub fn choose_lang(self, langs: &[String]) -> String {
         format!(
             "{}: {}",
             self.z_label,
@@ -26,8 +26,7 @@ impl LabelledNode {
                 .find_map(|lang| self.readable_labels.get(lang))
                 .unwrap_or(
                     self.readable_labels
-                        .iter()
-                        .map(|(_lang, label)| label)
+                        .values()
                         .next()
                         .unwrap_or(&"<no label>".to_string())
                 )
@@ -50,14 +49,14 @@ impl StringType {
         }
     }
 
-    pub fn to_raw(self) -> String {
+    pub fn into_raw(self) -> String {
         match self {
             StringType::String(s) => s,
             StringType::LabelledNode(n) => n.z_label,
         }
     }
 
-    pub fn choose_lang(self, langs: &Vec<String>) -> String {
+    pub fn choose_lang(self, langs: &[String]) -> String {
         match self {
             StringType::String(s) => s,
             StringType::LabelledNode(n) => n.choose_lang(langs),

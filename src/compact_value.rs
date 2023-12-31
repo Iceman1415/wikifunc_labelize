@@ -134,22 +134,22 @@ impl CompactValue {
                             if inner_obj.len() == 1 {
                                 let (inner_k, inner_v) = inner_obj.into_iter().next().unwrap();
                                 let inner_k: Vec<_> = match inner_k {
-                                    CompactKey::StringType(k, t) => std::iter::once(SimpleType(k))
-                                        .chain(t.into_iter())
-                                        .collect(),
+                                    CompactKey::StringType(k, t) => {
+                                        std::iter::once(SimpleType(k)).chain(t).collect()
+                                    }
                                     CompactKey::Transient(t) => t.into_iter().collect(),
                                 };
                                 match key {
                                     CompactKey::StringType(k, t) => (
                                         CompactKey::StringType(
                                             k,
-                                            t.into_iter().chain(inner_k.into_iter()).collect(),
+                                            t.into_iter().chain(inner_k).collect(),
                                         ),
                                         inner_v,
                                     ),
                                     CompactKey::Transient(t) => (
                                         CompactKey::Transient(
-                                            t.into_iter().chain(inner_k.into_iter()).collect(),
+                                            t.into_iter().chain(inner_k).collect(),
                                         ),
                                         inner_v,
                                     ),
